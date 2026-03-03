@@ -301,19 +301,44 @@
       #three-canvas {
         left: 0;
         width: 100vw;
-        height: 45vh;
-        top: 55vh;
+        height: 40vh;
+        top: 0;
+        z-index: 0;
       }
-      #scroll-container { width: 100vw; }
-      section { min-height: 55vh; padding: 4vh 1rem; }
-      .text-card { padding: 1.2rem; }
-      #progress-dots { left: auto; right: 0.8rem; }
+      #scroll-container {
+        width: 100vw;
+        background: transparent;
+        border-right: none;
+        position: relative;
+        z-index: 1;
+        margin-top: 35vh;
+      }
+      section {
+        min-height: 70vh;
+        padding: 2vh 1rem;
+      }
+      .text-card {
+        padding: 1.2rem;
+        background: rgba(8, 10, 24, 0.92);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+      #progress-dots {
+        left: auto;
+        right: 0.8rem;
+        top: 20vh;
+        transform: none;
+      }
       #bar-chart-overlay {
         width: calc(100vw - 2rem);
         right: 1rem;
-        bottom: 0.5rem;
+        bottom: auto;
+        top: 0.5rem;
+        max-height: 35vh;
+        overflow-y: auto;
       }
-      #scroll-hint { left: 50%; }
+      #scroll-hint { left: 50%; bottom: 1rem; }
+      #section-indicator { bottom: auto; top: 0.5rem; right: 0.8rem; }
     }
   </style>
 </head>

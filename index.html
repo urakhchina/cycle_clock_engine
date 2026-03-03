@@ -298,47 +298,88 @@
     }
     @media (max-width: 600px) {
       :root { --text-width: 100vw; }
+
+      /* Canvas = full-screen immersive background */
       #three-canvas {
         left: 0;
-        width: 100vw;
-        height: 40vh;
         top: 0;
+        width: 100vw;
+        height: 100vh;
         z-index: 0;
       }
+
+      /* Transparent scroll layer over the 3D scene */
       #scroll-container {
         width: 100vw;
         background: transparent;
         border-right: none;
         position: relative;
         z-index: 1;
-        margin-top: 35vh;
       }
+
+      /* Each act = full viewport, card anchored at bottom */
       section {
-        min-height: 70vh;
-        padding: 2vh 1rem;
+        min-height: 100vh;
+        padding: 0 0.75rem 1.2rem;
+        align-items: flex-end;
       }
+
+      /* Compact floating cards — glass morphism over 3D */
       .text-card {
-        padding: 1.2rem;
-        background: rgba(8, 10, 24, 0.92);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-      }
-      #progress-dots {
-        left: auto;
-        right: 0.8rem;
-        top: 20vh;
-        transform: none;
-      }
-      #bar-chart-overlay {
-        width: calc(100vw - 2rem);
-        right: 1rem;
-        bottom: auto;
-        top: 0.5rem;
-        max-height: 35vh;
+        padding: 1rem 1.1rem;
+        background: rgba(5, 5, 16, 0.82);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(120, 160, 255, 0.12);
+        border-radius: 14px;
+        max-height: 45vh;
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
       }
-      #scroll-hint { left: 50%; bottom: 1rem; }
-      #section-indicator { bottom: auto; top: 0.5rem; right: 0.8rem; }
+      .text-card h2 { font-size: 1.1rem; margin-bottom: 0.35rem; }
+      .text-card .act-label { font-size: 0.65rem; margin-bottom: 0.3rem; }
+      .text-card p { font-size: 0.8rem; line-height: 1.6; margin-bottom: 0.4rem; }
+      .stat { font-size: 0.75rem; padding: 1px 5px; }
+      .legend { gap: 0.4rem; margin-top: 0.5rem; }
+      .legend-item { font-size: 0.7rem; }
+      .legend-dot { width: 7px; height: 7px; }
+
+      /* Touch-friendly controls */
+      .toggle-btn { padding: 7px 16px; font-size: 0.82rem; }
+      .slider-group input[type="range"] { height: 6px; }
+      .controls { margin-top: 0.7rem; }
+
+      /* Hide bar chart on mobile — the stat is in the card text */
+      #bar-chart-overlay { display: none !important; }
+
+      /* Progress dots: horizontal row at top center */
+      #progress-dots {
+        left: 50%;
+        top: 0.7rem;
+        right: auto;
+        transform: translateX(-50%);
+        flex-direction: row;
+        gap: 12px;
+      }
+      .prog-dot { width: 7px; height: 7px; }
+
+      /* Section indicator: top right, out of the way */
+      #section-indicator {
+        top: 0.7rem;
+        right: 0.7rem;
+        bottom: auto;
+        font-size: 0.65rem;
+      }
+
+      #scroll-hint {
+        left: 50%;
+        bottom: 48vh;
+        font-size: 0.72rem;
+      }
+
+      /* Loading screen tweaks */
+      #loading .title { font-size: 1rem; }
+      #loading .sub { font-size: 0.75rem; }
     }
   </style>
 </head>
@@ -742,10 +783,13 @@ let act0Radius = 2;
 let act1Groups = { left: null, right: null };   // chirality in Act 1
 let act2CuboGroups = [];                         // explode in Act 2
 let act3FiberMeshes = [];                        // pulsing fibers in Act 3
+let act4EmpireRays = [];                         // pulsing empire ray lines in Act 4
 let act5Particle = null;                         // Cycle Clock particle
-let act5Trail = null;                            // trail line
+let act5Trail = null;                            // dynamic fading trail
 let act5ClusterCenters = [];                     // cluster positions for hopping
-let act5State = { currentIdx: 0, nextIdx: 1, phase: 'dwell', timer: 0, visited: [] };
+let act5BurstRings = [];                         // frame savings burst effects
+const ACT5_TRAIL_LENGTH = 90;                    // trail history buffer size
+let act5State = { currentIdx: 0, nextIdx: 1, phase: 'dwell', timer: 0, trailHistory: [] };
 
 // ═══════════════════════════════════════════════════════════════════
 // Scene/Camera/Renderer Setup
@@ -1099,15 +1143,38 @@ function buildAct3(d20g, dProj) {
 // ═══════════════════════════════════════════════════════════════════
 function buildAct4(dFig, dScan) {
   const g = new THREE.Group();
+  act4EmpireRays = [];
 
   const dMax = Math.max(...dFig.dists) || 1;
   const colors = dFig.dists.map(v => coolwarm(v / dMax));
   g.add(createColoredPoints(dFig.points, colors, 0.04, 0.35));
 
+  // Origin star
+  g.add(createStar([0, 0, 0], GOLD, 0.16));
+
   dScan.clusters.forEach((cluster, i) => {
     const hex = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
     g.add(createStar(cluster.center, hex, 0.2));
     g.add(createPoints(cluster.neighbor_pts, hex, 0.05, 0.5));
+
+    // Empire Ray: glowing line from origin to cluster center
+    const rayGeo = new THREE.BufferGeometry();
+    const rayPositions = new Float32Array([
+      0, 0, 0,
+      cluster.center[0], cluster.center[1], cluster.center[2]
+    ]);
+    rayGeo.setAttribute('position', new THREE.BufferAttribute(rayPositions, 3));
+    const rayMat = new THREE.LineBasicMaterial({
+      color: hex,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    rayMat.userData = { baseOpacity: 0.5 };
+    const ray = new THREE.LineSegments(rayGeo, rayMat);
+    g.add(ray);
+    act4EmpireRays.push(ray);
   });
 
   const el = document.getElementById('cluster-count');
@@ -1126,6 +1193,7 @@ function buildAct4(dFig, dScan) {
 // ═══════════════════════════════════════════════════════════════════
 function buildAct5(dFig, dScan) {
   const g = new THREE.Group();
+  act5BurstRings = [];
 
   // FIG background (same as Act 4)
   const dMax = Math.max(...dFig.dists) || 1;
@@ -1140,7 +1208,7 @@ function buildAct5(dFig, dScan) {
     act5ClusterCenters.push(new THREE.Vector3(...cluster.center));
   });
 
-  // Particle: glowing sphere
+  // Particle: glowing sphere (Cycle Clock)
   const particleGeo = new THREE.SphereGeometry(0.12, 16, 16);
   const particleMat = new THREE.MeshStandardMaterial({
     color: GOLD,
@@ -1157,22 +1225,22 @@ function buildAct5(dFig, dScan) {
   }
   g.add(act5Particle);
 
-  // Trail line (grows as particle visits clusters)
+  // Dynamic Empire Wave trail — vertex-colored line that fades behind particle
   const trailGeo = new THREE.BufferGeometry();
-  // Pre-allocate enough for all cluster visits in a cycle
-  const maxTrailPts = (act5ClusterCenters.length + 1) * 2;
-  const trailPositions = new Float32Array(maxTrailPts * 3);
+  const trailPositions = new Float32Array(ACT5_TRAIL_LENGTH * 3);
+  const trailColors = new Float32Array(ACT5_TRAIL_LENGTH * 3);
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
   trailGeo.setDrawRange(0, 0);
   const trailMat = new THREE.LineBasicMaterial({
-    color: GOLD,
+    vertexColors: true,
     transparent: true,
-    opacity: 0.6,
+    opacity: 1.0,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
-  trailMat.userData = { baseOpacity: 0.6 };
-  act5Trail = new THREE.LineSegments(trailGeo, trailMat);
+  trailMat.userData = { baseOpacity: 1.0 };
+  act5Trail = new THREE.Line(trailGeo, trailMat);
   g.add(act5Trail);
 
   // Reset animation state
@@ -1181,8 +1249,7 @@ function buildAct5(dFig, dScan) {
     nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
     phase: 'dwell',
     timer: 0,
-    visited: [],
-    trailCount: 0
+    trailHistory: []
   };
 
   const r = maxRadius(dFig.points);
@@ -1363,11 +1430,17 @@ function transitionTo(idx) {
       nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
       phase: 'dwell',
       timer: 0,
-      visited: [],
-      trailCount: 0
+      trailHistory: []
     };
     if (act5Particle) act5Particle.position.copy(act5ClusterCenters[0]);
     if (act5Trail) act5Trail.geometry.setDrawRange(0, 0);
+    // Clean up any lingering burst rings
+    act5BurstRings.forEach(b => {
+      if (groups[5]) groups[5].remove(b);
+      b.geometry.dispose();
+      b.material.dispose();
+    });
+    act5BurstRings = [];
   }
 
   const hint = document.getElementById('scroll-hint');
@@ -1418,63 +1491,135 @@ function animate() {
     });
   }
 
-  // Animate Act 5 particle hopping
+  // Pulse Act 4 Empire Ray opacity
+  if (currentSection === 4) {
+    act4EmpireRays.forEach((ray, i) => {
+      const phase = elapsed * 2.0 + i * (Math.PI * 2 / act4EmpireRays.length);
+      const pulse = 0.15 + 0.45 * (0.5 + 0.5 * Math.sin(phase));
+      ray.material.userData.baseOpacity = pulse;
+    });
+  }
+
+  // Animate Act 5: helical Cycle Clock particle, fading trail, frame savings bursts
   if (currentSection === 5 && act5Particle && act5ClusterCenters.length > 1) {
     const st = act5State;
     const DWELL_TIME = 1.5;
-    const TRAVEL_TIME = 1.0;
+    const TRAVEL_TIME = 1.2;
     st.timer += dt;
 
     if (st.phase === 'dwell') {
-      // Particle pulses at current cluster
+      // Particle pulses at current cluster (internal clock vibration)
       const pulse = 1.0 + 0.3 * Math.sin(elapsed * 6);
       act5Particle.scale.setScalar(pulse);
 
       if (st.timer >= DWELL_TIME) {
         st.timer = 0;
         st.phase = 'travel';
-        // Record the trail segment start
         st.travelFrom = act5ClusterCenters[st.currentIdx].clone();
         st.travelTo = act5ClusterCenters[st.nextIdx].clone();
+
+        // Pre-compute helix axes for this segment
+        const dir = new THREE.Vector3().subVectors(st.travelTo, st.travelFrom).normalize();
+        let refVec = new THREE.Vector3(0, 1, 0);
+        if (Math.abs(dir.dot(refVec)) > 0.95) refVec = new THREE.Vector3(1, 0, 0);
+        st.helixPerp1 = new THREE.Vector3().crossVectors(dir, refVec).normalize();
+        st.helixPerp2 = new THREE.Vector3().crossVectors(dir, st.helixPerp1).normalize();
       }
     } else if (st.phase === 'travel') {
       const t = Math.min(st.timer / TRAVEL_TIME, 1.0);
-      // Smooth ease-in-out
       const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      act5Particle.position.lerpVectors(st.travelFrom, st.travelTo, ease);
+
+      // Helical Cycle Clock propagation: corkscrew around travel vector
+      const linearPos = new THREE.Vector3().lerpVectors(st.travelFrom, st.travelTo, ease);
+      const helixRadius = 0.18;
+      const helixTurns = 3.5;
+      const theta = ease * helixTurns * Math.PI * 2;
+      const taper = Math.sin(ease * Math.PI); // 0 at endpoints, 1 at midpoint
+      const offset = st.helixPerp1.clone().multiplyScalar(Math.cos(theta) * helixRadius * taper)
+        .add(st.helixPerp2.clone().multiplyScalar(Math.sin(theta) * helixRadius * taper));
+      act5Particle.position.copy(linearPos).add(offset);
       act5Particle.scale.setScalar(1.0);
 
+      // Record position in trail history every other frame for performance
+      st.trailHistory.push(act5Particle.position.clone());
+      if (st.trailHistory.length > ACT5_TRAIL_LENGTH) st.trailHistory.shift();
+
       if (t >= 1.0) {
-        // Arrived at next cluster
+        // Snap to destination
         act5Particle.position.copy(st.travelTo);
 
-        // Extend trail
-        const posAttr = act5Trail.geometry.getAttribute('position');
-        const idx = st.trailCount * 6;
-        if (idx + 5 < posAttr.array.length) {
-          posAttr.array[idx]     = st.travelFrom.x;
-          posAttr.array[idx + 1] = st.travelFrom.y;
-          posAttr.array[idx + 2] = st.travelFrom.z;
-          posAttr.array[idx + 3] = st.travelTo.x;
-          posAttr.array[idx + 4] = st.travelTo.y;
-          posAttr.array[idx + 5] = st.travelTo.z;
-          st.trailCount++;
-          posAttr.needsUpdate = true;
-          act5Trail.geometry.setDrawRange(0, st.trailCount * 2);
-        }
+        // Frame Savings burst: expanding, fading ring at arrival point
+        const clusterHex = CLUSTER_COLORS[st.nextIdx % CLUSTER_COLORS.length];
+        const burstGeo = new THREE.RingGeometry(0.08, 0.2, 32);
+        const burstMat = new THREE.MeshBasicMaterial({
+          color: clusterHex,
+          transparent: true,
+          opacity: 1.0,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        const burst = new THREE.Mesh(burstGeo, burstMat);
+        burst.position.copy(st.travelTo);
+        burst.lookAt(camera.position);
+        burst.userData.age = 0;
+        groups[5].add(burst);
+        act5BurstRings.push(burst);
 
         // Advance to next cluster
         st.currentIdx = st.nextIdx;
         st.nextIdx = (st.nextIdx + 1) % act5ClusterCenters.length;
 
-        // If we've completed a full cycle, reset trail for next loop
+        // Reset trail on full cycle
         if (st.currentIdx === 0) {
-          st.trailCount = 0;
-          act5Trail.geometry.setDrawRange(0, 0);
+          st.trailHistory = [];
         }
 
         st.timer = 0;
         st.phase = 'dwell';
+      }
+    }
+
+    // Update dynamic Empire Wave trail: vertex colors fade from gold → transparent
+    if (act5Trail) {
+      const posAttr = act5Trail.geometry.getAttribute('position');
+      const colAttr = act5Trail.geometry.getAttribute('color');
+      const n = st.trailHistory.length;
+      for (let i = 0; i < ACT5_TRAIL_LENGTH; i++) {
+        if (i < n) {
+          const p = st.trailHistory[i];
+          posAttr.array[i * 3]     = p.x;
+          posAttr.array[i * 3 + 1] = p.y;
+          posAttr.array[i * 3 + 2] = p.z;
+          // Gaussian-like fade: bright at tail (newest), dim at head (oldest)
+          const alpha = (i / n);
+          const fade = alpha * alpha; // quadratic drop-off
+          colAttr.array[i * 3]     = 1.0 * fade;
+          colAttr.array[i * 3 + 1] = 0.84 * fade;
+          colAttr.array[i * 3 + 2] = 0.0;
+        } else {
+          posAttr.array[i * 3] = posAttr.array[i * 3 + 1] = posAttr.array[i * 3 + 2] = 0;
+          colAttr.array[i * 3] = colAttr.array[i * 3 + 1] = colAttr.array[i * 3 + 2] = 0;
+        }
+      }
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+      act5Trail.geometry.setDrawRange(0, n);
+    }
+
+    // Update Frame Savings burst rings (expand + fade)
+    for (let i = act5BurstRings.length - 1; i >= 0; i--) {
+      const burst = act5BurstRings[i];
+      burst.userData.age += dt;
+      const bt = burst.userData.age / 0.7; // 0.7s burst duration
+      burst.scale.setScalar(1.0 + bt * 5.0);
+      burst.material.opacity = Math.max(0, 1.0 - bt);
+      burst.lookAt(camera.position);
+      if (bt >= 1.0) {
+        groups[5].remove(burst);
+        burst.geometry.dispose();
+        burst.material.dispose();
+        act5BurstRings.splice(i, 1);
       }
     }
   }

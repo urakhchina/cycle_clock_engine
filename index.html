@@ -405,11 +405,10 @@
   <div class="prog-dot" data-act="2" title="The Golden Anatomy"></div>
   <div class="prog-dot" data-act="3" title="The 8D Origin"></div>
   <div class="prog-dot" data-act="4" title="The Game Board"></div>
-  <div class="prog-dot" data-act="5" title="The Physics"></div>
 </div>
 
 <!-- Section Indicator -->
-<div id="section-indicator">1 / 6</div>
+<div id="section-indicator">1 / 5</div>
 
 <!-- Scroll Hint -->
 <div id="scroll-hint">Scroll to explore &#8595;</div>
@@ -499,19 +498,6 @@
       <div class="legend">
         <span class="legend-item"><span class="legend-dot" style="background:#1a3040"></span>FIG background</span>
         <span class="legend-item"><span class="legend-dot" style="background:#ffd700"></span>Cluster centers</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Act 6: The Physics -->
-  <section data-section="5">
-    <div class="text-card">
-      <div class="act-label">Act 6</div>
-      <h2>The Physics</h2>
-      <p>A fundamental particle is a <em>Cycle Clock</em> &mdash; a dynamic oscillator moving through this grid of 20Gs. The <strong>Principle of Efficient Language</strong> (PEL): the universe minimizes computational load. When a particle moves, it chooses paths between 20Gs that maximize the reuse of overlapping Empires &mdash; <em>Frame Savings</em>.</p>
-      <div class="legend">
-        <span class="legend-item"><span class="legend-dot" style="background:#ffd700"></span>Particle path</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#ff4444"></span>Active cluster</span>
       </div>
     </div>
   </section>
@@ -784,12 +770,6 @@ let act1Groups = { left: null, right: null };   // chirality in Act 1
 let act2CuboGroups = [];                         // explode in Act 2
 let act3FiberMeshes = [];                        // pulsing fibers in Act 3
 let act4EmpireRays = [];                         // pulsing empire ray lines in Act 4
-let act5Particle = null;                         // Cycle Clock particle
-let act5Trail = null;                            // dynamic fading trail
-let act5ClusterCenters = [];                     // cluster positions for hopping
-let act5BurstRings = [];                         // frame savings burst effects
-const ACT5_TRAIL_LENGTH = 90;                    // trail history buffer size
-let act5State = { currentIdx: 0, nextIdx: 1, phase: 'dwell', timer: 0, trailHistory: [] };
 
 // ═══════════════════════════════════════════════════════════════════
 // Scene/Camera/Renderer Setup
@@ -1189,78 +1169,6 @@ function buildAct4(dFig, dScan) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Act 5: The Physics
-// ═══════════════════════════════════════════════════════════════════
-function buildAct5(dFig, dScan) {
-  const g = new THREE.Group();
-  act5BurstRings = [];
-
-  // FIG background (same as Act 4)
-  const dMax = Math.max(...dFig.dists) || 1;
-  const colors = dFig.dists.map(v => coolwarm(v / dMax));
-  g.add(createColoredPoints(dFig.points, colors, 0.04, 0.25));
-
-  // Cluster center stars
-  act5ClusterCenters = [];
-  dScan.clusters.forEach((cluster, i) => {
-    const hex = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
-    g.add(createStar(cluster.center, hex, 0.2));
-    act5ClusterCenters.push(new THREE.Vector3(...cluster.center));
-  });
-
-  // Particle: glowing sphere (Cycle Clock)
-  const particleGeo = new THREE.SphereGeometry(0.12, 16, 16);
-  const particleMat = new THREE.MeshStandardMaterial({
-    color: GOLD,
-    emissive: GOLD,
-    emissiveIntensity: 2.0,
-    transparent: true,
-    opacity: 1.0,
-    depthWrite: false
-  });
-  particleMat.userData = { baseOpacity: 1.0 };
-  act5Particle = new THREE.Mesh(particleGeo, particleMat);
-  if (act5ClusterCenters.length > 0) {
-    act5Particle.position.copy(act5ClusterCenters[0]);
-  }
-  g.add(act5Particle);
-
-  // Dynamic Empire Wave trail — vertex-colored line that fades behind particle
-  const trailGeo = new THREE.BufferGeometry();
-  const trailPositions = new Float32Array(ACT5_TRAIL_LENGTH * 3);
-  const trailColors = new Float32Array(ACT5_TRAIL_LENGTH * 3);
-  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-  trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
-  trailGeo.setDrawRange(0, 0);
-  const trailMat = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 1.0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  });
-  trailMat.userData = { baseOpacity: 1.0 };
-  act5Trail = new THREE.Line(trailGeo, trailMat);
-  g.add(act5Trail);
-
-  // Reset animation state
-  act5State = {
-    currentIdx: 0,
-    nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
-    phase: 'dwell',
-    timer: 0,
-    trailHistory: []
-  };
-
-  const r = maxRadius(dFig.points);
-  cameraTargets.push({
-    pos: new THREE.Vector3(0, r * 0.3, r * 2.5),
-    look: new THREE.Vector3(0, 0, 0)
-  });
-  return g;
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // Bar Chart Builder (Act 1 — The Mirror Universe)
 // ═══════════════════════════════════════════════════════════════════
 function buildBarChart(d) {
@@ -1414,7 +1322,7 @@ function setupScrollObserver() {
 function transitionTo(idx) {
   userInteracting = false;
   currentSection = idx;
-  document.getElementById('section-indicator').textContent = `${idx + 1} / 6`;
+  document.getElementById('section-indicator').textContent = `${idx + 1} / 5`;
 
   document.querySelectorAll('.prog-dot').forEach((dot, i) => {
     dot.classList.toggle('active', i === idx);
@@ -1422,26 +1330,6 @@ function transitionTo(idx) {
 
   // Bar chart overlay: show only on Act 1 (idx 1 — The Mirror Universe)
   document.getElementById('bar-chart-overlay').style.opacity = (idx === 1) ? '1' : '0';
-
-  // Reset Act 5 animation when entering
-  if (idx === 5 && act5ClusterCenters.length > 0) {
-    act5State = {
-      currentIdx: 0,
-      nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
-      phase: 'dwell',
-      timer: 0,
-      trailHistory: []
-    };
-    if (act5Particle) act5Particle.position.copy(act5ClusterCenters[0]);
-    if (act5Trail) act5Trail.geometry.setDrawRange(0, 0);
-    // Clean up any lingering burst rings
-    act5BurstRings.forEach(b => {
-      if (groups[5]) groups[5].remove(b);
-      b.geometry.dispose();
-      b.material.dispose();
-    });
-    act5BurstRings = [];
-  }
 
   const hint = document.getElementById('scroll-hint');
   if (hint && idx > 0) hint.style.display = 'none';
@@ -1500,130 +1388,6 @@ function animate() {
     });
   }
 
-  // Animate Act 5: helical Cycle Clock particle, fading trail, frame savings bursts
-  if (currentSection === 5 && act5Particle && act5ClusterCenters.length > 1) {
-    const st = act5State;
-    const DWELL_TIME = 1.5;
-    const TRAVEL_TIME = 1.2;
-    st.timer += dt;
-
-    if (st.phase === 'dwell') {
-      // Particle pulses at current cluster (internal clock vibration)
-      const pulse = 1.0 + 0.3 * Math.sin(elapsed * 6);
-      act5Particle.scale.setScalar(pulse);
-
-      if (st.timer >= DWELL_TIME) {
-        st.timer = 0;
-        st.phase = 'travel';
-        st.travelFrom = act5ClusterCenters[st.currentIdx].clone();
-        st.travelTo = act5ClusterCenters[st.nextIdx].clone();
-
-        // Pre-compute helix axes for this segment
-        const dir = new THREE.Vector3().subVectors(st.travelTo, st.travelFrom).normalize();
-        let refVec = new THREE.Vector3(0, 1, 0);
-        if (Math.abs(dir.dot(refVec)) > 0.95) refVec = new THREE.Vector3(1, 0, 0);
-        st.helixPerp1 = new THREE.Vector3().crossVectors(dir, refVec).normalize();
-        st.helixPerp2 = new THREE.Vector3().crossVectors(dir, st.helixPerp1).normalize();
-      }
-    } else if (st.phase === 'travel') {
-      const t = Math.min(st.timer / TRAVEL_TIME, 1.0);
-      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-
-      // Helical Cycle Clock propagation: corkscrew around travel vector
-      const linearPos = new THREE.Vector3().lerpVectors(st.travelFrom, st.travelTo, ease);
-      const helixRadius = 0.18;
-      const helixTurns = 3.5;
-      const theta = ease * helixTurns * Math.PI * 2;
-      const taper = Math.sin(ease * Math.PI); // 0 at endpoints, 1 at midpoint
-      const offset = st.helixPerp1.clone().multiplyScalar(Math.cos(theta) * helixRadius * taper)
-        .add(st.helixPerp2.clone().multiplyScalar(Math.sin(theta) * helixRadius * taper));
-      act5Particle.position.copy(linearPos).add(offset);
-      act5Particle.scale.setScalar(1.0);
-
-      // Record position in trail history every other frame for performance
-      st.trailHistory.push(act5Particle.position.clone());
-      if (st.trailHistory.length > ACT5_TRAIL_LENGTH) st.trailHistory.shift();
-
-      if (t >= 1.0) {
-        // Snap to destination
-        act5Particle.position.copy(st.travelTo);
-
-        // Frame Savings burst: expanding, fading ring at arrival point
-        const clusterHex = CLUSTER_COLORS[st.nextIdx % CLUSTER_COLORS.length];
-        const burstGeo = new THREE.RingGeometry(0.08, 0.2, 32);
-        const burstMat = new THREE.MeshBasicMaterial({
-          color: clusterHex,
-          transparent: true,
-          opacity: 1.0,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        });
-        const burst = new THREE.Mesh(burstGeo, burstMat);
-        burst.position.copy(st.travelTo);
-        burst.lookAt(camera.position);
-        burst.userData.age = 0;
-        groups[5].add(burst);
-        act5BurstRings.push(burst);
-
-        // Advance to next cluster
-        st.currentIdx = st.nextIdx;
-        st.nextIdx = (st.nextIdx + 1) % act5ClusterCenters.length;
-
-        // Reset trail on full cycle
-        if (st.currentIdx === 0) {
-          st.trailHistory = [];
-        }
-
-        st.timer = 0;
-        st.phase = 'dwell';
-      }
-    }
-
-    // Update dynamic Empire Wave trail: vertex colors fade from gold → transparent
-    if (act5Trail) {
-      const posAttr = act5Trail.geometry.getAttribute('position');
-      const colAttr = act5Trail.geometry.getAttribute('color');
-      const n = st.trailHistory.length;
-      for (let i = 0; i < ACT5_TRAIL_LENGTH; i++) {
-        if (i < n) {
-          const p = st.trailHistory[i];
-          posAttr.array[i * 3]     = p.x;
-          posAttr.array[i * 3 + 1] = p.y;
-          posAttr.array[i * 3 + 2] = p.z;
-          // Gaussian-like fade: bright at tail (newest), dim at head (oldest)
-          const alpha = (i / n);
-          const fade = alpha * alpha; // quadratic drop-off
-          colAttr.array[i * 3]     = 1.0 * fade;
-          colAttr.array[i * 3 + 1] = 0.84 * fade;
-          colAttr.array[i * 3 + 2] = 0.0;
-        } else {
-          posAttr.array[i * 3] = posAttr.array[i * 3 + 1] = posAttr.array[i * 3 + 2] = 0;
-          colAttr.array[i * 3] = colAttr.array[i * 3 + 1] = colAttr.array[i * 3 + 2] = 0;
-        }
-      }
-      posAttr.needsUpdate = true;
-      colAttr.needsUpdate = true;
-      act5Trail.geometry.setDrawRange(0, n);
-    }
-
-    // Update Frame Savings burst rings (expand + fade)
-    for (let i = act5BurstRings.length - 1; i >= 0; i--) {
-      const burst = act5BurstRings[i];
-      burst.userData.age += dt;
-      const bt = burst.userData.age / 0.7; // 0.7s burst duration
-      burst.scale.setScalar(1.0 + bt * 5.0);
-      burst.material.opacity = Math.max(0, 1.0 - bt);
-      burst.lookAt(camera.position);
-      if (bt >= 1.0) {
-        groups[5].remove(burst);
-        burst.geometry.dispose();
-        burst.material.dispose();
-        act5BurstRings.splice(i, 1);
-      }
-    }
-  }
-
   controls.update();
   composer.render();
 }
@@ -1651,7 +1415,6 @@ async function init() {
   groups.push(buildAct2(data.cell8_chiral_20g, data.cell6_c5c));
   groups.push(buildAct3(data.cell8_chiral_20g, data.cell2_projections));
   groups.push(buildAct4(data.cell4_fig, data.cell9_scan));
-  groups.push(buildAct5(data.cell4_fig, data.cell9_scan));
 
   // Add groups, hide all except first
   groups.forEach((g, i) => {

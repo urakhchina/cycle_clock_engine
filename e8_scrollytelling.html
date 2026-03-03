@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The 20G: Chiral Geometry</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    :root { --text-width: 33vw; }
+    body {
+      background: #050510;
+      color: #d8dce4;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ─── Two-Column Layout ────────────────────────────────────── */
+    /* Left: scrolling text | Right: fixed 3D canvas              */
+
+    #three-canvas {
+      position: fixed;
+      top: 0;
+      left: var(--text-width);
+      width: calc(100vw - var(--text-width));
+      height: 100vh;
+      z-index: 0;
+    }
+
+    /* ─── Scroll Container (left column) ───────────────────────── */
+    #scroll-container {
+      position: relative;
+      z-index: 1;
+      width: var(--text-width);
+      background: #050510;
+      border-right: 1px solid rgba(120, 160, 255, 0.06);
+    }
+    section {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 8vh 1.5rem;
+    }
+
+    /* ─── Text Cards ───────────────────────────────────────────── */
+    .text-card {
+      width: 100%;
+      background: rgba(8, 10, 24, 0.95);
+      border: 1px solid rgba(120, 160, 255, 0.08);
+      border-radius: 14px;
+      padding: 1.6rem 1.6rem;
+      transition: opacity 0.6s ease;
+    }
+    .text-card h2 {
+      font-size: 1.35rem;
+      color: #8ec8ff;
+      margin-bottom: 0.5rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .text-card .act-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: rgba(140,180,255,0.45);
+      margin-bottom: 0.4rem;
+    }
+    .text-card p {
+      font-size: 0.88rem;
+      line-height: 1.72;
+      color: #a0b0c0;
+      margin-bottom: 0.6rem;
+    }
+    .text-card p:last-child { margin-bottom: 0; }
+    .text-card em { color: #b0ccee; font-style: italic; }
+    .text-card strong { color: #c8ddf0; font-weight: 600; }
+
+    /* ─── Stats & Badges ───────────────────────────────────────── */
+    .stat {
+      display: inline-block;
+      background: rgba(100, 160, 255, 0.1);
+      color: #8cc8ff;
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.82rem;
+    }
+
+    /* ─── Legends ──────────────────────────────────────────────── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      color: #7888a0;
+    }
+    .legend-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* ─── Interactive Controls ─────────────────────────────────── */
+    .controls {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .toggle-btn {
+      padding: 5px 14px;
+      border: 1px solid rgba(120, 170, 255, 0.25);
+      border-radius: 6px;
+      background: rgba(40, 50, 80, 0.5);
+      color: #8ab8ee;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .toggle-btn:hover { background: rgba(60, 80, 120, 0.6); border-color: rgba(120, 170, 255, 0.5); }
+    .toggle-btn.active {
+      background: rgba(80, 120, 200, 0.4);
+      border-color: rgba(120, 170, 255, 0.6);
+      color: #b0ddff;
+    }
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      margin-top: 0.3rem;
+    }
+    .slider-label {
+      font-size: 0.75rem;
+      color: #6688aa;
+      white-space: nowrap;
+    }
+    .slider-group input[type="range"] {
+      flex: 1;
+      accent-color: #6699cc;
+      height: 4px;
+    }
+
+    /* ─── Bar Chart Overlay (Act 2, inside canvas area) ──────── */
+    #bar-chart-overlay {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      width: 320px;
+      background: rgba(8, 10, 24, 0.92);
+      border: 1px solid rgba(120, 160, 255, 0.1);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #bar-chart-overlay h3 {
+      color: #8ec8ff;
+      font-size: 0.95rem;
+      margin-bottom: 0.7rem;
+      text-align: center;
+      font-weight: 600;
+    }
+    .chart-section { margin-bottom: 0.8rem; }
+    .chart-section:last-child { margin-bottom: 0; }
+    .chart-label {
+      font-size: 0.75rem;
+      color: #667;
+      margin-bottom: 0.25rem;
+    }
+    .bars-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 55px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 2px;
+    }
+    .bar {
+      flex: 1;
+      min-width: 4px;
+      border-radius: 2px 2px 0 0;
+      transition: height 0.4s ease;
+    }
+
+    /* ─── Progress Dots (in canvas area) ─────────────────────── */
+    #progress-dots {
+      position: fixed;
+      left: calc(var(--text-width) + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .prog-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      transition: all 0.4s ease;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .prog-dot.active {
+      background: rgba(120, 180, 255, 0.7);
+      box-shadow: 0 0 8px rgba(100, 160, 255, 0.5);
+      transform: scale(1.3);
+    }
+    .prog-dot:hover { background: rgba(255,255,255,0.3); }
+
+    /* ─── Section Indicator ────────────────────────────────────── */
+    #section-indicator {
+      position: fixed;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      z-index: 3;
+      color: rgba(255, 255, 255, 0.2);
+      font-size: 0.72rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* ─── Loading ──────────────────────────────────────────────── */
+    #loading {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: #050510;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.8s ease;
+    }
+    #loading .title {
+      color: #8ec8ff;
+      font-size: 1.2rem;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+    #loading .sub {
+      color: #445;
+      font-size: 0.82rem;
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2px solid rgba(120,170,255,0.15);
+      border-top-color: #6af;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Scroll Hint (in text column) ────────────────────────── */
+    #scroll-hint {
+      position: fixed;
+      bottom: 2rem;
+      left: calc(var(--text-width) / 2);
+      transform: translateX(-50%);
+      z-index: 4;
+      color: rgba(255,255,255,0.25);
+      font-size: 0.78rem;
+      animation: fadeInOut 3s ease-in-out infinite;
+      pointer-events: none;
+      letter-spacing: 0.05em;
+    }
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 1; }
+    }
+
+    /* ─── KaTeX Overrides ──────────────────────────────────────── */
+    .katex { color: #a0c8ee; font-size: 0.92em; }
+    .katex-display { margin: 0.5rem 0; }
+
+    /* ─── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      :root { --text-width: 40vw; }
+    }
+    @media (max-width: 600px) {
+      :root { --text-width: 100vw; }
+      #three-canvas {
+        left: 0;
+        width: 100vw;
+        height: 45vh;
+        top: 55vh;
+      }
+      #scroll-container { width: 100vw; }
+      section { min-height: 55vh; padding: 4vh 1rem; }
+      .text-card { padding: 1.2rem; }
+      #progress-dots { left: auto; right: 0.8rem; }
+      #bar-chart-overlay {
+        width: calc(100vw - 2rem);
+        right: 1rem;
+        bottom: 0.5rem;
+      }
+      #scroll-hint { left: 50%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="title">The 20G</div>
+  <div class="sub">Loading geometry...</div>
+</div>
+
+<!-- Three.js Canvas -->
+<canvas id="three-canvas"></canvas>
+
+<!-- Bar Chart Overlay (Act 2) -->
+<div id="bar-chart-overlay"></div>
+
+<!-- Progress Dots -->
+<div id="progress-dots">
+  <div class="prog-dot active" data-act="0" title="The 20G"></div>
+  <div class="prog-dot" data-act="1" title="The Mirror Universe"></div>
+  <div class="prog-dot" data-act="2" title="The Golden Anatomy"></div>
+  <div class="prog-dot" data-act="3" title="The 8D Origin"></div>
+  <div class="prog-dot" data-act="4" title="The Game Board"></div>
+  <div class="prog-dot" data-act="5" title="The Physics"></div>
+</div>
+
+<!-- Section Indicator -->
+<div id="section-indicator">1 / 6</div>
+
+<!-- Scroll Hint -->
+<div id="scroll-hint">Scroll to explore &#8595;</div>
+
+<!-- ─── Scroll Sections ─────────────────────────────────────────── -->
+<div id="scroll-container">
+
+  <!-- Act 1: The 20G -->
+  <section data-section="0">
+    <div class="text-card">
+      <div class="act-label">Act 1</div>
+      <h2>The 20G</h2>
+      <p>Twenty regular tetrahedra sharing a single vertex &mdash; they cannot naturally fit together in flat 3D space. But nature applies a precise <em>Golden Twist</em> (~22.24&deg;, governed by \(\varphi\)) to close the gaps, creating this perfect gapless shape.</p>
+      <p><span class="stat">20 tetrahedra</span> &middot; <span class="stat">61 vertices</span> &middot; <span class="stat">0% overlap</span></p>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#ff6688"></span>Red cubo</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4a9eff"></span>Blue</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>Cyan</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ffaa33"></span>Orange</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#8a6aff"></span>Purple</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act 2: The Mirror Universe -->
+  <section data-section="1">
+    <div class="text-card">
+      <div class="act-label">Act 2</div>
+      <h2>The Mirror Universe</h2>
+      <p>The twist allows for two chiralities &mdash; Left and Right. They share the exact same <span class="stat">61</span> physical points but utilize completely different internal edges &mdash; <span class="stat">0 shared edges</span>. Toggle to compare.</p>
+      <p>The bar chart proves every tetrahedron has identical volume <span class="stat">|V| = 5.49</span>, regardless of chirality. Only the topology changes.</p>
+      <div class="controls" id="chirality-controls">
+        <button class="toggle-btn active" data-mode="left">Left twist</button>
+        <button class="toggle-btn" data-mode="right">Right twist</button>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#ff6688"></span>Left twist (warm)</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4a9eff"></span>Right twist (cool)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act 3: The Golden Anatomy -->
+  <section data-section="2">
+    <div class="text-card">
+      <div class="act-label">Act 3</div>
+      <h2>The Golden Anatomy</h2>
+      <p>The 20G is a <em>Golden Composition</em> of <span class="stat">5</span> distinct 4-Groups of tetrahedra, each extracted from a parent cuboctahedron. Pull them apart to reveal the 5 Archimedean solids hiding inside, each with <span class="stat">12 vertices</span>, <span class="stat">24 edges</span>, and <span class="stat">14 faces</span>.</p>
+      <p>They are compounded by the golden rotation \(r_T\). Drag the slider to pull them apart.</p>
+      <div class="controls">
+        <div class="slider-group">
+          <span class="slider-label">Explode</span>
+          <input type="range" id="explode-slider" min="0" max="100" value="0">
+        </div>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#ff6688"></span>Cubo 1</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4a9eff"></span>Cubo 2</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>Cubo 3</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ffaa33"></span>Cubo 4</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#8a6aff"></span>Cubo 5</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act 4: The 8D Origin -->
+  <section data-section="3">
+    <div class="text-card">
+      <div class="act-label">Act 4</div>
+      <h2>The 8D Origin</h2>
+      <p>Why exactly 5 cuboctahedra? Via the quaternionic Hopf fibration (\(S^7 \to S^4\)), the <span class="stat">240</span> E\(_8\) roots group into ten 4D 24-cells, forming a 5+5 bipartite structure. The 5 cuboctahedra in 3D are the direct conformal shadows of these 8D pairs.</p>
+      <p><span class="stat">240 roots</span> &middot; <span class="stat">10 24-cells</span> &middot; <span class="stat">5 pairs</span></p>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#4a9eff"></span>Inner shell</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ff6688"></span>Outer shell</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>Hopf fibers</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act 5: The Game Board -->
+  <section data-section="4">
+    <div class="text-card">
+      <div class="act-label">Act 5</div>
+      <h2>The Game Board</h2>
+      <p>The 20G is not alone &mdash; it lives in the <strong>Fibonacci Icosagrid</strong> (FIG), an aperiodic lattice of <span class="stat">423 vertices</span>. Because of rigid aperiodic rules, turning one 20G &ldquo;on&rdquo; instantly forces a vast non-local network &mdash; an <em>Empire</em> &mdash; of other points across the grid to also turn on. A KD-Tree scan finds <span class="stat" id="cluster-count">6</span> neighbors.</p>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#1a3040"></span>FIG background</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ffd700"></span>Cluster centers</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act 6: The Physics -->
+  <section data-section="5">
+    <div class="text-card">
+      <div class="act-label">Act 6</div>
+      <h2>The Physics</h2>
+      <p>A fundamental particle is a <em>Cycle Clock</em> &mdash; a dynamic oscillator moving through this grid of 20Gs. The <strong>Principle of Efficient Language</strong> (PEL): the universe minimizes computational load. When a particle moves, it chooses paths between 20Gs that maximize the reuse of overlapping Empires &mdash; <em>Frame Savings</em>.</p>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#ffd700"></span>Particle path</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ff4444"></span>Active cluster</span>
+      </div>
+    </div>
+  </section>
+
+</div><!-- end scroll-container -->
+
+<!-- ─── Scripts ─────────────────────────────────────────────────── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ═══════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════
+const PHI = (1 + Math.sqrt(5)) / 2;
+const CUBO_HEX = {
+  red: 0xff6688, blue: 0x4a9eff, green: 0x00e5ff,
+  orange: 0xffaa33, purple: 0x8a6aff
+};
+const CUBO_NAMES = ['red', 'blue', 'green', 'orange', 'purple'];
+const CLUSTER_COLORS = [0xff4444, 0x44ff88, 0x4488ff, 0xff8844, 0xff44ff, 0x44ffff];
+const GOLD = 0xffd700;
+const BG_COLOR = 0x050510;
+
+// ═══════════════════════════════════════════════════════════════════
+// Color Maps
+// ═══════════════════════════════════════════════════════════════════
+function coolwarm(t) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.5) {
+    const s = t * 2;
+    return [0.2 + 0.1 * s, 0.2 + 0.2 * s, 0.6 + 0.4 * (1 - s)];
+  } else {
+    const s = (t - 0.5) * 2;
+    return [0.6 + 0.4 * s, 0.2 + 0.1 * (1 - s), 0.2 + 0.1 * (1 - s)];
+  }
+}
+
+function plasma(t) {
+  t = Math.max(0, Math.min(1, t));
+  const r = Math.min(1, 0.05 + 2.8 * t * t);
+  const g = Math.min(1, Math.max(0, -0.4 + 2.2 * t));
+  const b = Math.min(1, Math.max(0, 0.55 + 0.5 * t - 2.3 * t * t + 1.0 * t * t * t));
+  return [r, g, b];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Geometry Helpers
+// ═══════════════════════════════════════════════════════════════════
+function createPoints(positions, color, size = 0.05, opacity = 0.8) {
+  if (!positions || positions.length === 0) return new THREE.Group();
+  const n = positions.length;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3]     = positions[i][0];
+    pos[i * 3 + 1] = positions[i][1];
+    pos[i * 3 + 2] = positions[i][2];
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({
+    color, size, transparent: true, opacity,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  mat.userData = { baseOpacity: opacity };
+  return new THREE.Points(geo, mat);
+}
+
+function createColoredPoints(positions, colors, size = 0.05, opacity = 0.8) {
+  if (!positions || positions.length === 0) return new THREE.Group();
+  const n = positions.length;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3]     = positions[i][0];
+    pos[i * 3 + 1] = positions[i][1];
+    pos[i * 3 + 2] = positions[i][2];
+    col[i * 3]     = colors[i][0];
+    col[i * 3 + 1] = colors[i][1];
+    col[i * 3 + 2] = colors[i][2];
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    size, transparent: true, opacity, vertexColors: true,
+    sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  mat.userData = { baseOpacity: opacity };
+  return new THREE.Points(geo, mat);
+}
+
+function createEdges(flatCoords, color, opacity = 0.5) {
+  if (!flatCoords || flatCoords.length === 0) return new THREE.Group();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(flatCoords), 3));
+  const mat = new THREE.LineBasicMaterial({
+    color, transparent: true, opacity, depthWrite: false
+  });
+  mat.userData = { baseOpacity: opacity };
+  return new THREE.LineSegments(geo, mat);
+}
+
+function createStar(pos, color = GOLD, size = 0.18) {
+  return createPoints([pos], color, size, 1.0);
+}
+
+function createTetraFaces(origin, v0, v1, v2, color, opacity = 0.25) {
+  const geo = new THREE.BufferGeometry();
+  const verts = new Float32Array([
+    ...origin, ...v0, ...v1,
+    ...origin, ...v1, ...v2,
+    ...origin, ...v0, ...v2,
+    ...v0, ...v1, ...v2
+  ]);
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshPhongMaterial({
+    color,
+    emissive: 0x111111,
+    specular: 0xffffff,
+    shininess: 280,
+    transparent: true,
+    opacity,
+    side: THREE.DoubleSide,
+    flatShading: true,
+    depthWrite: false
+  });
+  mat.userData = { baseOpacity: opacity };
+  return new THREE.Mesh(geo, mat);
+}
+
+function createTriangleFace(v0, v1, v2, color, opacity = 0.2) {
+  const geo = new THREE.BufferGeometry();
+  const verts = new Float32Array([...v0, ...v1, ...v2]);
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshPhongMaterial({
+    color,
+    emissive: 0x111111,
+    specular: 0xffffff,
+    shininess: 280,
+    transparent: true,
+    opacity,
+    side: THREE.DoubleSide,
+    flatShading: true,
+    depthWrite: false
+  });
+  mat.userData = { baseOpacity: opacity };
+  return new THREE.Mesh(geo, mat);
+}
+
+function maxRadius(pts) {
+  let r = 0;
+  for (const p of pts) {
+    const d = Math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+    if (d > r) r = d;
+  }
+  return r || 1;
+}
+
+function computeNearestEdges(pts, toleranceMult = 1.15) {
+  const n = pts.length;
+  if (n < 2) return [];
+  let minD = Infinity;
+  const dists = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = pts[i][0] - pts[j][0];
+      const dy = pts[i][1] - pts[j][1];
+      const dz = pts[i][2] - pts[j][2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      dists.push([i, j, d]);
+      if (d > 0.001 && d < minD) minD = d;
+    }
+  }
+  const thresh = minD * toleranceMult;
+  const edges = [];
+  for (const [i, j, d] of dists) {
+    if (d < thresh) {
+      edges.push(pts[i][0], pts[i][1], pts[i][2],
+                 pts[j][0], pts[j][1], pts[j][2]);
+    }
+  }
+  return edges;
+}
+
+function computeEdgeLength(pts) {
+  let minD = Infinity;
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) {
+      const dx = pts[i][0]-pts[j][0], dy = pts[i][1]-pts[j][1], dz = pts[i][2]-pts[j][2];
+      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (d > 0.001 && d < minD) minD = d;
+    }
+  return minD;
+}
+
+function findSquareFaces(pts, edgeLen) {
+  const n = pts.length;
+  const tol = edgeLen * 0.1;
+  const adj = Array.from({length: n}, () => []);
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) {
+      const dx = pts[i][0]-pts[j][0], dy = pts[i][1]-pts[j][1], dz = pts[i][2]-pts[j][2];
+      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (Math.abs(d - edgeLen) < tol) { adj[i].push(j); adj[j].push(i); }
+    }
+  const diagLen = edgeLen * Math.SQRT2;
+  const squares = [];
+  const seen = new Set();
+  for (let a = 0; a < n; a++) {
+    for (const b of adj[a]) {
+      if (b <= a) continue;
+      for (const c of adj[b]) {
+        if (c <= a || c === a) continue;
+        for (const d of adj[c]) {
+          if (d <= a || d === b || d === c) continue;
+          if (!adj[a].includes(d)) continue;
+          const dxAC = pts[a][0]-pts[c][0], dyAC = pts[a][1]-pts[c][1], dzAC = pts[a][2]-pts[c][2];
+          const dAC = Math.sqrt(dxAC*dxAC + dyAC*dyAC + dzAC*dzAC);
+          const dxBD = pts[b][0]-pts[d][0], dyBD = pts[b][1]-pts[d][1], dzBD = pts[b][2]-pts[d][2];
+          const dBD = Math.sqrt(dxBD*dxBD + dyBD*dyBD + dzBD*dzBD);
+          if (Math.abs(dAC - diagLen) < tol && Math.abs(dBD - diagLen) < tol) {
+            const key = [a,b,c,d].sort().join(',');
+            if (!seen.has(key)) { seen.add(key); squares.push([a,b,c,d]); }
+          }
+        }
+      }
+    }
+  }
+  return squares;
+}
+
+function centroid(pts) {
+  const n = pts.length;
+  let cx = 0, cy = 0, cz = 0;
+  for (const p of pts) { cx += p[0]; cy += p[1]; cz += p[2]; }
+  return [cx / n, cy / n, cz / n];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Global State
+// ═══════════════════════════════════════════════════════════════════
+let scene, camera, renderer, controls, composer;
+const groups = [];
+let currentSection = 0;
+let userInteracting = false;
+const cameraTargets = [];
+const clock = new THREE.Clock();
+
+// Interactive state
+let chiralityMode = 'left';
+let explodeValue = 0;
+let act0Groups = { left: null, right: null };
+let act0Radius = 2;
+let act1Groups = { left: null, right: null };   // chirality in Act 1
+let act2CuboGroups = [];                         // explode in Act 2
+let act3FiberMeshes = [];                        // pulsing fibers in Act 3
+let act5Particle = null;                         // Cycle Clock particle
+let act5Trail = null;                            // trail line
+let act5ClusterCenters = [];                     // cluster positions for hopping
+let act5State = { currentIdx: 0, nextIdx: 1, phase: 'dwell', timer: 0, visited: [] };
+
+// ═══════════════════════════════════════════════════════════════════
+// Scene/Camera/Renderer Setup
+// ═══════════════════════════════════════════════════════════════════
+function setupRenderer() {
+  const canvas = document.getElementById('three-canvas');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  renderer.setSize(cw, ch);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(BG_COLOR);
+
+  const ambient = new THREE.AmbientLight(0x222233, 0.6);
+  scene.add(ambient);
+
+  const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+  dirLight1.position.set(5, 8, 5);
+  scene.add(dirLight1);
+
+  const dirLight2 = new THREE.DirectionalLight(0x8888aa, 0.4);
+  dirLight2.position.set(-5, -3, -5);
+  scene.add(dirLight2);
+
+  const ptCyan = new THREE.PointLight(0x00e5ff, 0.8, 30);
+  ptCyan.position.set(4, 3, 4);
+  scene.add(ptCyan);
+
+  const ptPurple = new THREE.PointLight(0x8a6aff, 0.5, 30);
+  ptPurple.position.set(-4, -2, 3);
+  scene.add(ptPurple);
+
+  camera = new THREE.PerspectiveCamera(50, cw / ch, 0.1, 500);
+  camera.position.set(0, 1, 6);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.4;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enableZoom = false;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+
+  let autoRotateTimeout = null;
+  renderer.domElement.addEventListener('pointerdown', () => {
+    userInteracting = true;
+    controls.autoRotate = false;
+    clearTimeout(autoRotateTimeout);
+  });
+  renderer.domElement.addEventListener('pointerup', () => {
+    clearTimeout(autoRotateTimeout);
+    autoRotateTimeout = setTimeout(() => { controls.autoRotate = true; }, 3000);
+  });
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(cw, ch),
+    0.15, 0.3, 0.75
+  );
+  composer.addPass(bloomPass);
+
+  window.addEventListener('resize', () => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+    bloomPass.resolution.set(w, h);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 0: The 20G
+// ═══════════════════════════════════════════════════════════════════
+function buildAct0(d) {
+  const g = new THREE.Group();
+  const origin = d.origin || [0, 0, 0];
+  const allVerts = d.vertices;
+
+  const vColorMap = {};
+  (d.cuboctahedra || []).forEach(cubo => {
+    const hex = CUBO_HEX[cubo.color] || 0xffffff;
+    (cubo.vertex_indices || []).forEach(vi => { vColorMap[vi] = hex; });
+  });
+
+  function triColor(tri) {
+    return vColorMap[tri[0]] || 0x4488ff;
+  }
+
+  function build20GChiral(tris) {
+    const sub = new THREE.Group();
+    tris.forEach(tri => {
+      const v0 = allVerts[tri[0]], v1 = allVerts[tri[1]], v2 = allVerts[tri[2]];
+      const hex = triColor(tri);
+      sub.add(createTetraFaces(origin, v0, v1, v2, hex, 0.30));
+      sub.add(createEdges([...v0,...v1, ...v1,...v2, ...v0,...v2], hex, 0.85));
+      sub.add(createEdges([...origin,...v0, ...origin,...v1, ...origin,...v2], hex, 0.12));
+    });
+    (d.cuboctahedra || []).forEach(cubo => {
+      const hex = CUBO_HEX[cubo.color] || 0xffffff;
+      sub.add(createPoints(cubo.vertices, hex, 0.06, 0.95));
+    });
+    sub.add(createStar(origin, GOLD, 0.14));
+    return sub;
+  }
+
+  const leftG = build20GChiral(d.left_triangles || []);
+  const rightG = build20GChiral(d.right_triangles || []);
+  rightG.visible = false;
+  g.add(leftG);
+  g.add(rightG);
+
+  act0Groups.left = leftG;
+  act0Groups.right = rightG;
+
+  const r = maxRadius(allVerts);
+  act0Radius = r;
+  const pentDir = new THREE.Vector3(0.5257, 0.0, 0.8507).normalize();
+  cameraTargets.push({
+    pos: pentDir.clone().multiplyScalar(r * 2.8),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 1: The Mirror Universe
+// ═══════════════════════════════════════════════════════════════════
+function buildAct1(d20g, dChiral) {
+  const g = new THREE.Group();
+  const origin = d20g.origin || [0, 0, 0];
+  const allVerts = d20g.vertices;
+
+  const vColorMap = {};
+  (d20g.cuboctahedra || []).forEach(cubo => {
+    const hex = CUBO_HEX[cubo.color] || 0xffffff;
+    (cubo.vertex_indices || []).forEach(vi => { vColorMap[vi] = hex; });
+  });
+
+  function triColor(tri) {
+    return vColorMap[tri[0]] || 0x4488ff;
+  }
+
+  function build20GChiral(tris) {
+    const sub = new THREE.Group();
+    tris.forEach(tri => {
+      const v0 = allVerts[tri[0]], v1 = allVerts[tri[1]], v2 = allVerts[tri[2]];
+      const hex = triColor(tri);
+      sub.add(createTetraFaces(origin, v0, v1, v2, hex, 0.30));
+      sub.add(createEdges([...v0,...v1, ...v1,...v2, ...v0,...v2], hex, 0.85));
+      sub.add(createEdges([...origin,...v0, ...origin,...v1, ...origin,...v2], hex, 0.12));
+    });
+    (d20g.cuboctahedra || []).forEach(cubo => {
+      const hex = CUBO_HEX[cubo.color] || 0xffffff;
+      sub.add(createPoints(cubo.vertices, hex, 0.06, 0.95));
+    });
+    sub.add(createStar(origin, GOLD, 0.14));
+    return sub;
+  }
+
+  const leftG = build20GChiral(d20g.left_triangles || []);
+  const rightG = build20GChiral(d20g.right_triangles || []);
+  rightG.visible = false;
+  g.add(leftG);
+  g.add(rightG);
+
+  act1Groups = { left: leftG, right: rightG };
+
+  buildBarChart(dChiral);
+
+  const r = maxRadius(allVerts);
+  const pentDir = new THREE.Vector3(0.5257, 0.0, 0.8507).normalize();
+  cameraTargets.push({
+    pos: pentDir.clone().multiplyScalar(r * 2.8),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 2: The Golden Anatomy
+// ═══════════════════════════════════════════════════════════════════
+function buildAct2(d20g, dC5C) {
+  const g = new THREE.Group();
+  act2CuboGroups = [];
+
+  if (dC5C.fig_background) g.add(createPoints(dC5C.fig_background, 0x0f1a28, 0.018, 0.08));
+  g.add(createStar(d20g.origin || [0,0,0], GOLD, 0.12));
+
+  const allVerts = d20g.vertices;
+
+  d20g.cuboctahedra.forEach((cubo, ci) => {
+    const hex = CUBO_HEX[cubo.color] || 0xffffff;
+    const sub = new THREE.Group();
+
+    sub.add(createPoints(cubo.vertices, hex, 0.09, 0.9));
+
+    const edgeCoords = computeNearestEdges(cubo.vertices, 1.15);
+    if (edgeCoords.length) sub.add(createEdges(edgeCoords, hex, 0.35));
+
+    const vi = cubo.vertex_indices || [];
+    const globalToLocal = {};
+    vi.forEach((gi, li) => { globalToLocal[gi] = li; });
+    const localVerts = cubo.vertices;
+    const tris = [...(cubo.left_triangles || []), ...(cubo.right_triangles || [])];
+    tris.forEach(tri => {
+      const v0 = localVerts[globalToLocal[tri[0]]];
+      const v1 = localVerts[globalToLocal[tri[1]]];
+      const v2 = localVerts[globalToLocal[tri[2]]];
+      if (v0 && v1 && v2) sub.add(createTriangleFace(v0, v1, v2, hex, 0.06));
+    });
+
+    if (localVerts.length === 12) {
+      const edgeLen = computeEdgeLength(localVerts);
+      const squares = findSquareFaces(localVerts, edgeLen);
+      squares.forEach(sq => {
+        const [a,b,c,dd] = sq;
+        sub.add(createTriangleFace(localVerts[a], localVerts[b], localVerts[c], hex, 0.04));
+        sub.add(createTriangleFace(localVerts[a], localVerts[c], localVerts[dd], hex, 0.04));
+      });
+    }
+
+    g.add(sub);
+
+    const angle = ci * (2 * Math.PI / 5);
+    const explodeDir = [Math.cos(angle), 0.3 * Math.sin(angle * 2), Math.sin(angle)];
+    act2CuboGroups.push({ group: sub, direction: explodeDir });
+  });
+
+  const allV = d20g.cuboctahedra.flatMap(c => c.vertices);
+  const r = maxRadius(allV);
+  cameraTargets.push({
+    pos: new THREE.Vector3(0, r * 0.3, r * 4.0),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 3: The 8D Origin
+// ═══════════════════════════════════════════════════════════════════
+function buildAct3(d20g, dProj) {
+  const g = new THREE.Group();
+  act3FiberMeshes = [];
+  const origin = d20g.origin || [0, 0, 0];
+  const allVerts = d20g.vertices;
+
+  // Central 20G (left-twist, same as Act 0)
+  const vColorMap = {};
+  (d20g.cuboctahedra || []).forEach(cubo => {
+    const hex = CUBO_HEX[cubo.color] || 0xffffff;
+    (cubo.vertex_indices || []).forEach(vi => { vColorMap[vi] = hex; });
+  });
+
+  function triColor(tri) {
+    return vColorMap[tri[0]] || 0x4488ff;
+  }
+
+  const leftTris = d20g.left_triangles || [];
+  leftTris.forEach(tri => {
+    const v0 = allVerts[tri[0]], v1 = allVerts[tri[1]], v2 = allVerts[tri[2]];
+    const hex = triColor(tri);
+    g.add(createTetraFaces(origin, v0, v1, v2, hex, 0.25));
+    g.add(createEdges([...v0,...v1, ...v1,...v2, ...v0,...v2], hex, 0.7));
+    g.add(createEdges([...origin,...v0, ...origin,...v1, ...origin,...v2], hex, 0.08));
+  });
+  (d20g.cuboctahedra || []).forEach(cubo => {
+    const hex = CUBO_HEX[cubo.color] || 0xffffff;
+    g.add(createPoints(cubo.vertices, hex, 0.05, 0.8));
+  });
+  g.add(createStar(origin, GOLD, 0.12));
+
+  // Faint 600-cell shells from cell2_projections
+  if (dProj.parallel_inner) {
+    g.add(createPoints(dProj.parallel_inner, 0x4a9eff, 0.025, 0.15));
+  }
+  if (dProj.parallel_outer) {
+    g.add(createPoints(dProj.parallel_outer, 0xff6688, 0.025, 0.15));
+  }
+
+  // 5 glowing Hopf fiber rings (one per cuboctahedron color)
+  const r20g = maxRadius(allVerts);
+  const ringRadius = r20g * 1.2;
+  const cuboColors = [CUBO_HEX.red, CUBO_HEX.blue, CUBO_HEX.green, CUBO_HEX.orange, CUBO_HEX.purple];
+
+  for (let i = 0; i < 5; i++) {
+    const segments = 64;
+    const positions = new Float32Array(segments * 3);
+    const angle = (i * 2 * Math.PI) / 5;
+
+    // Rotation axis tilted at 72° increments
+    const axis = new THREE.Vector3(
+      Math.cos(angle),
+      0.4 * Math.sin(angle * 1.5),
+      Math.sin(angle)
+    ).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, axis);
+
+    for (let s = 0; s < segments; s++) {
+      const t = (s / segments) * Math.PI * 2;
+      const px = Math.cos(t) * ringRadius;
+      const py = 0;
+      const pz = Math.sin(t) * ringRadius;
+      const v = new THREE.Vector3(px, py, pz).applyQuaternion(quat);
+      positions[s * 3] = v.x;
+      positions[s * 3 + 1] = v.y;
+      positions[s * 3 + 2] = v.z;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    // Create index for a closed loop
+    const indices = [];
+    for (let s = 0; s < segments; s++) {
+      indices.push(s, (s + 1) % segments);
+    }
+    geo.setIndex(indices);
+
+    const mat = new THREE.LineBasicMaterial({
+      color: cuboColors[i],
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      linewidth: 1
+    });
+    mat.userData = { baseOpacity: 0.6 };
+
+    const ring = new THREE.LineSegments(geo, mat);
+    g.add(ring);
+    act3FiberMeshes.push(ring);
+  }
+
+  const r = Math.max(r20g, maxRadius(dProj.parallel_outer || [[1,0,0]]));
+  const pentDir = new THREE.Vector3(0.5257, 0.0, 0.8507).normalize();
+  cameraTargets.push({
+    pos: pentDir.clone().multiplyScalar(r * 3.2),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 4: The Game Board
+// ═══════════════════════════════════════════════════════════════════
+function buildAct4(dFig, dScan) {
+  const g = new THREE.Group();
+
+  const dMax = Math.max(...dFig.dists) || 1;
+  const colors = dFig.dists.map(v => coolwarm(v / dMax));
+  g.add(createColoredPoints(dFig.points, colors, 0.04, 0.35));
+
+  dScan.clusters.forEach((cluster, i) => {
+    const hex = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
+    g.add(createStar(cluster.center, hex, 0.2));
+    g.add(createPoints(cluster.neighbor_pts, hex, 0.05, 0.5));
+  });
+
+  const el = document.getElementById('cluster-count');
+  if (el) el.textContent = dScan.clusters.length;
+
+  const r = maxRadius(dFig.points);
+  cameraTargets.push({
+    pos: new THREE.Vector3(0, r * 0.3, r * 2.5),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Act 5: The Physics
+// ═══════════════════════════════════════════════════════════════════
+function buildAct5(dFig, dScan) {
+  const g = new THREE.Group();
+
+  // FIG background (same as Act 4)
+  const dMax = Math.max(...dFig.dists) || 1;
+  const colors = dFig.dists.map(v => coolwarm(v / dMax));
+  g.add(createColoredPoints(dFig.points, colors, 0.04, 0.25));
+
+  // Cluster center stars
+  act5ClusterCenters = [];
+  dScan.clusters.forEach((cluster, i) => {
+    const hex = CLUSTER_COLORS[i % CLUSTER_COLORS.length];
+    g.add(createStar(cluster.center, hex, 0.2));
+    act5ClusterCenters.push(new THREE.Vector3(...cluster.center));
+  });
+
+  // Particle: glowing sphere
+  const particleGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  const particleMat = new THREE.MeshStandardMaterial({
+    color: GOLD,
+    emissive: GOLD,
+    emissiveIntensity: 2.0,
+    transparent: true,
+    opacity: 1.0,
+    depthWrite: false
+  });
+  particleMat.userData = { baseOpacity: 1.0 };
+  act5Particle = new THREE.Mesh(particleGeo, particleMat);
+  if (act5ClusterCenters.length > 0) {
+    act5Particle.position.copy(act5ClusterCenters[0]);
+  }
+  g.add(act5Particle);
+
+  // Trail line (grows as particle visits clusters)
+  const trailGeo = new THREE.BufferGeometry();
+  // Pre-allocate enough for all cluster visits in a cycle
+  const maxTrailPts = (act5ClusterCenters.length + 1) * 2;
+  const trailPositions = new Float32Array(maxTrailPts * 3);
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  trailGeo.setDrawRange(0, 0);
+  const trailMat = new THREE.LineBasicMaterial({
+    color: GOLD,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  trailMat.userData = { baseOpacity: 0.6 };
+  act5Trail = new THREE.LineSegments(trailGeo, trailMat);
+  g.add(act5Trail);
+
+  // Reset animation state
+  act5State = {
+    currentIdx: 0,
+    nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
+    phase: 'dwell',
+    timer: 0,
+    visited: [],
+    trailCount: 0
+  };
+
+  const r = maxRadius(dFig.points);
+  cameraTargets.push({
+    pos: new THREE.Vector3(0, r * 0.3, r * 2.5),
+    look: new THREE.Vector3(0, 0, 0)
+  });
+  return g;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Bar Chart Builder (Act 1 — The Mirror Universe)
+// ═══════════════════════════════════════════════════════════════════
+function buildBarChart(d) {
+  const overlay = document.getElementById('bar-chart-overlay');
+  const lVols = d.left_signed_volumes;
+  const rVols = d.right_signed_volumes;
+  const absMax = Math.max(
+    ...lVols.map(Math.abs), ...rVols.map(Math.abs), 0.001
+  );
+
+  overlay.innerHTML = `
+    <h3>|V| = 5.49 &mdash; identical for all 40 tetrahedra</h3>
+    <div class="chart-section">
+      <div class="chart-label">Left twist &mdash;
+        <span style="color:#667">20 tetrahedra</span>
+      </div>
+      <div class="bars-container" id="left-bars"></div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-label">Right twist &mdash;
+        <span style="color:#667">20 tetrahedra</span>
+      </div>
+      <div class="bars-container" id="right-bars"></div>
+    </div>
+  `;
+
+  function fillBars(containerId, vols, barColors) {
+    const container = document.getElementById(containerId);
+    vols.forEach((v, i) => {
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const h = Math.abs(v) / absMax * 50;
+      bar.style.height = h + 'px';
+      bar.style.backgroundColor = barColors[i] || '#888';
+      bar.style.opacity = '0.85';
+      bar.title = `Tet ${i + 1}: |V| = ${Math.abs(v).toFixed(4)}`;
+      container.appendChild(bar);
+    });
+  }
+
+  fillBars('left-bars', lVols, d.bar_colors_left);
+  fillBars('right-bars', rVols, d.bar_colors_right);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Interactive Controls
+// ═══════════════════════════════════════════════════════════════════
+function setupControls() {
+  // Chirality toggle (Act 1 / section 1 — The Mirror Universe)
+  document.querySelectorAll('#chirality-controls .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#chirality-controls .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      chiralityMode = btn.dataset.mode;
+      updateChiralityVisibility();
+    });
+  });
+
+  // Explode slider (Act 2)
+  const slider = document.getElementById('explode-slider');
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      explodeValue = parseInt(e.target.value) / 100;
+      updateExplode();
+    });
+  }
+
+  // Progress dots
+  document.querySelectorAll('.prog-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const act = parseInt(dot.dataset.act);
+      const section = document.querySelector(`section[data-section="${act}"]`);
+      if (section) section.scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+}
+
+function updateChiralityVisibility() {
+  if (!act1Groups.left || !act1Groups.right) return;
+  act1Groups.left.visible = (chiralityMode === 'left');
+  act1Groups.right.visible = (chiralityMode === 'right');
+}
+
+function updateExplode() {
+  const scale = explodeValue * 1.8;
+  const opacityMult = 1.0 - explodeValue * 0.55;
+  act2CuboGroups.forEach(({ group, direction }) => {
+    group.position.set(
+      direction[0] * scale,
+      direction[1] * scale,
+      direction[2] * scale
+    );
+    group.traverse(child => {
+      if (child.material) {
+        const base = child.material.userData?.baseOpacity ?? 1.0;
+        child.material.opacity = base * opacityMult;
+      }
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Scroll Observer
+// ═══════════════════════════════════════════════════════════════════
+function setupScrollObserver() {
+  const sections = document.querySelectorAll('section');
+  const observer = new IntersectionObserver((entries) => {
+    let bestIdx = currentSection;
+    let bestRatio = 0;
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+        bestRatio = entry.intersectionRatio;
+        bestIdx = parseInt(entry.target.dataset.section);
+      }
+    });
+    const mid = window.innerHeight / 2;
+    let scrollBest = 0, scrollBestDist = Infinity;
+    sections.forEach((sec, i) => {
+      const rect = sec.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      const d = Math.abs(center - mid);
+      if (d < scrollBestDist) { scrollBestDist = d; scrollBest = i; }
+    });
+    if (scrollBest !== currentSection) transitionTo(scrollBest);
+  }, {
+    threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0]
+  });
+
+  sections.forEach(s => observer.observe(s));
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        const mid = window.innerHeight / 2;
+        let best = 0, bestDist = Infinity;
+        sections.forEach((sec, i) => {
+          const rect = sec.getBoundingClientRect();
+          const center = rect.top + rect.height / 2;
+          const d = Math.abs(center - mid);
+          if (d < bestDist) { bestDist = d; best = i; }
+        });
+        if (best !== currentSection) transitionTo(best);
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+}
+
+function transitionTo(idx) {
+  userInteracting = false;
+  currentSection = idx;
+  document.getElementById('section-indicator').textContent = `${idx + 1} / 6`;
+
+  document.querySelectorAll('.prog-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === idx);
+  });
+
+  // Bar chart overlay: show only on Act 1 (idx 1 — The Mirror Universe)
+  document.getElementById('bar-chart-overlay').style.opacity = (idx === 1) ? '1' : '0';
+
+  // Reset Act 5 animation when entering
+  if (idx === 5 && act5ClusterCenters.length > 0) {
+    act5State = {
+      currentIdx: 0,
+      nextIdx: act5ClusterCenters.length > 1 ? 1 : 0,
+      phase: 'dwell',
+      timer: 0,
+      visited: [],
+      trailCount: 0
+    };
+    if (act5Particle) act5Particle.position.copy(act5ClusterCenters[0]);
+    if (act5Trail) act5Trail.geometry.setDrawRange(0, 0);
+  }
+
+  const hint = document.getElementById('scroll-hint');
+  if (hint && idx > 0) hint.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Animation Loop
+// ═══════════════════════════════════════════════════════════════════
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const elapsed = clock.getElapsedTime();
+
+  // Lerp camera toward current section's target
+  if (!userInteracting) {
+    const ct = cameraTargets[currentSection];
+    if (ct) {
+      camera.position.lerp(ct.pos, 0.03);
+      controls.target.lerp(ct.look, 0.03);
+    }
+  }
+
+  // Fade groups in/out
+  groups.forEach((g, i) => {
+    const target = (i === currentSection) ? 1.0 : 0.0;
+    g.userData.fade += (target - g.userData.fade) * 0.05;
+
+    if (g.userData.fade < 0.005) {
+      g.visible = false;
+    } else {
+      g.visible = true;
+      g.traverse(child => {
+        if (child.material && !child.userData.skipFade) {
+          const base = child.material.userData?.baseOpacity ?? 1.0;
+          child.material.opacity = base * g.userData.fade;
+        }
+      });
+    }
+  });
+
+  // Pulse Act 3 fiber ring opacity
+  if (currentSection === 3) {
+    act3FiberMeshes.forEach((ring, i) => {
+      const phase = elapsed * 1.5 + i * (Math.PI * 2 / 5);
+      const pulse = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(phase));
+      ring.material.userData.baseOpacity = pulse;
+    });
+  }
+
+  // Animate Act 5 particle hopping
+  if (currentSection === 5 && act5Particle && act5ClusterCenters.length > 1) {
+    const st = act5State;
+    const DWELL_TIME = 1.5;
+    const TRAVEL_TIME = 1.0;
+    st.timer += dt;
+
+    if (st.phase === 'dwell') {
+      // Particle pulses at current cluster
+      const pulse = 1.0 + 0.3 * Math.sin(elapsed * 6);
+      act5Particle.scale.setScalar(pulse);
+
+      if (st.timer >= DWELL_TIME) {
+        st.timer = 0;
+        st.phase = 'travel';
+        // Record the trail segment start
+        st.travelFrom = act5ClusterCenters[st.currentIdx].clone();
+        st.travelTo = act5ClusterCenters[st.nextIdx].clone();
+      }
+    } else if (st.phase === 'travel') {
+      const t = Math.min(st.timer / TRAVEL_TIME, 1.0);
+      // Smooth ease-in-out
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      act5Particle.position.lerpVectors(st.travelFrom, st.travelTo, ease);
+      act5Particle.scale.setScalar(1.0);
+
+      if (t >= 1.0) {
+        // Arrived at next cluster
+        act5Particle.position.copy(st.travelTo);
+
+        // Extend trail
+        const posAttr = act5Trail.geometry.getAttribute('position');
+        const idx = st.trailCount * 6;
+        if (idx + 5 < posAttr.array.length) {
+          posAttr.array[idx]     = st.travelFrom.x;
+          posAttr.array[idx + 1] = st.travelFrom.y;
+          posAttr.array[idx + 2] = st.travelFrom.z;
+          posAttr.array[idx + 3] = st.travelTo.x;
+          posAttr.array[idx + 4] = st.travelTo.y;
+          posAttr.array[idx + 5] = st.travelTo.z;
+          st.trailCount++;
+          posAttr.needsUpdate = true;
+          act5Trail.geometry.setDrawRange(0, st.trailCount * 2);
+        }
+
+        // Advance to next cluster
+        st.currentIdx = st.nextIdx;
+        st.nextIdx = (st.nextIdx + 1) % act5ClusterCenters.length;
+
+        // If we've completed a full cycle, reset trail for next loop
+        if (st.currentIdx === 0) {
+          st.trailCount = 0;
+          act5Trail.geometry.setDrawRange(0, 0);
+        }
+
+        st.timer = 0;
+        st.phase = 'dwell';
+      }
+    }
+  }
+
+  controls.update();
+  composer.render();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════
+async function init() {
+  let data;
+  try {
+    const resp = await fetch('e8_fig_data.json');
+    data = await resp.json();
+  } catch (e) {
+    document.getElementById('loading').innerHTML =
+      `<div class="title" style="color:#f66">Failed to load data</div>
+       <div class="sub">Serve with: <code style="color:#aaa">python3 -m http.server 8000</code></div>`;
+    return;
+  }
+
+  setupRenderer();
+
+  // Build acts
+  groups.push(buildAct0(data.cell8_chiral_20g));
+  groups.push(buildAct1(data.cell8_chiral_20g, data.cell7_chirality));
+  groups.push(buildAct2(data.cell8_chiral_20g, data.cell6_c5c));
+  groups.push(buildAct3(data.cell8_chiral_20g, data.cell2_projections));
+  groups.push(buildAct4(data.cell4_fig, data.cell9_scan));
+  groups.push(buildAct5(data.cell4_fig, data.cell9_scan));
+
+  // Add groups, hide all except first
+  groups.forEach((g, i) => {
+    g.userData.fade = (i === 0) ? 1.0 : 0.0;
+    g.visible = (i === 0);
+    scene.add(g);
+  });
+
+  // Set initial camera
+  if (cameraTargets[0]) {
+    camera.position.copy(cameraTargets[0].pos);
+    controls.target.copy(cameraTargets[0].look);
+    controls.update();
+  }
+
+  // Setup interactions
+  setupControls();
+  setupScrollObserver();
+
+  // Hide loading
+  const loadingEl = document.getElementById('loading');
+  loadingEl.style.opacity = '0';
+  setTimeout(() => loadingEl.style.display = 'none', 800);
+
+  // Render KaTeX
+  function tryRenderKaTeX() {
+    if (window.renderMathInElement) {
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true }
+        ],
+        throwOnError: false
+      });
+    } else {
+      setTimeout(tryRenderKaTeX, 200);
+    }
+  }
+  tryRenderKaTeX();
+
+  // Start animation
+  animate();
+}
+
+// Wait for KaTeX to load, then init
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(init, 100));
+} else {
+  setTimeout(init, 100);
+}
+</script>
+</body>
+</html>

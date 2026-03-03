@@ -804,7 +804,9 @@ function setupRenderer() {
   ptPurple.position.set(-4, -2, 3);
   scene.add(ptPurple);
 
-  camera = new THREE.PerspectiveCamera(50, cw / ch, 0.1, 500);
+  // Wider FOV on portrait/mobile so geometry isn't cut off
+  const initFov = (cw / ch < 1) ? 72 : 50;
+  camera = new THREE.PerspectiveCamera(initFov, cw / ch, 0.1, 500);
   camera.position.set(0, 1, 6);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -838,6 +840,7 @@ function setupRenderer() {
   window.addEventListener('resize', () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     camera.aspect = w / h;
+    camera.fov = (w / h < 1) ? 72 : 50;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     composer.setSize(w, h);

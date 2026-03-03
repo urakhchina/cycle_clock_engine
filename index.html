@@ -299,81 +299,78 @@
     @media (max-width: 600px) {
       :root { --text-width: 100vw; }
 
-      /* Canvas = full-screen immersive background */
+      /* Canvas fixed at bottom half */
       #three-canvas {
         left: 0;
-        top: 0;
+        top: auto;
+        bottom: 0;
         width: 100vw;
-        height: 100vh;
+        height: 55vh;
         z-index: 0;
       }
 
-      /* Transparent scroll layer over the 3D scene */
+      /* Text scrolls in the top portion */
       #scroll-container {
         width: 100vw;
-        background: transparent;
+        background: #050510;
         border-right: none;
         position: relative;
         z-index: 1;
       }
 
-      /* Each act = full viewport, card anchored at bottom */
+      /* Each section = top text area only */
       section {
-        min-height: 100vh;
-        padding: 0 0.75rem 1.2rem;
-        align-items: flex-end;
+        min-height: 45vh;
+        padding: 1.5rem 0.8rem 1rem;
+        align-items: flex-start;
       }
 
-      /* Compact floating cards — glass morphism over 3D */
+      /* Compact cards */
       .text-card {
-        padding: 1rem 1.1rem;
-        background: rgba(5, 5, 16, 0.82);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border: 1px solid rgba(120, 160, 255, 0.12);
-        border-radius: 14px;
-        max-height: 45vh;
+        padding: 1rem 1rem;
+        max-height: 42vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
-      .text-card h2 { font-size: 1.1rem; margin-bottom: 0.35rem; }
-      .text-card .act-label { font-size: 0.65rem; margin-bottom: 0.3rem; }
-      .text-card p { font-size: 0.8rem; line-height: 1.6; margin-bottom: 0.4rem; }
-      .stat { font-size: 0.75rem; padding: 1px 5px; }
-      .legend { gap: 0.4rem; margin-top: 0.5rem; }
-      .legend-item { font-size: 0.7rem; }
+      .text-card h2 { font-size: 1.05rem; margin-bottom: 0.3rem; }
+      .text-card .act-label { font-size: 0.62rem; margin-bottom: 0.25rem; }
+      .text-card p { font-size: 0.78rem; line-height: 1.55; margin-bottom: 0.35rem; }
+      .stat { font-size: 0.72rem; padding: 1px 5px; }
+      .legend { gap: 0.35rem; margin-top: 0.4rem; }
+      .legend-item { font-size: 0.68rem; }
       .legend-dot { width: 7px; height: 7px; }
 
       /* Touch-friendly controls */
-      .toggle-btn { padding: 7px 16px; font-size: 0.82rem; }
+      .toggle-btn { padding: 7px 16px; font-size: 0.8rem; }
       .slider-group input[type="range"] { height: 6px; }
-      .controls { margin-top: 0.7rem; }
+      .controls { margin-top: 0.6rem; }
 
       /* Hide bar chart on mobile — the stat is in the card text */
       #bar-chart-overlay { display: none !important; }
 
-      /* Progress dots: horizontal row at top center */
+      /* Progress dots: vertical, right edge, centered on canvas */
       #progress-dots {
-        left: 50%;
-        top: 0.7rem;
-        right: auto;
-        transform: translateX(-50%);
-        flex-direction: row;
-        gap: 12px;
+        left: auto;
+        right: 0.5rem;
+        top: auto;
+        bottom: 27.5vh;
+        transform: translateY(50%);
+        flex-direction: column;
+        gap: 8px;
       }
       .prog-dot { width: 7px; height: 7px; }
 
-      /* Section indicator: top right, out of the way */
+      /* Section indicator: bottom right corner */
       #section-indicator {
-        top: 0.7rem;
-        right: 0.7rem;
-        bottom: auto;
-        font-size: 0.65rem;
+        bottom: 0.5rem;
+        right: 0.5rem;
+        top: auto;
+        font-size: 0.6rem;
       }
 
       #scroll-hint {
         left: 50%;
-        bottom: 48vh;
+        bottom: 56vh;
         font-size: 0.72rem;
       }
 

@@ -3,3 +3,12 @@
 CCT-StandardModel/
 __pycache__/
 cycle_clock_executed.ipynb
+*.pdf
+*.wxf
+*.mx
+*.xlsx
+*.nb
+*.wl
+__pycache__/
+cycle_clock_executed.ipynb
+CCT-StandardModel/

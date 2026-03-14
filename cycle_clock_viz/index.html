@@ -41,7 +41,7 @@ canvas { display: block; }
 
 #phase-ring { width: 110px; height: 110px; }
 
-.bar-track { background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; margin: 4px 0; }
+.bar-track { background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; margin: 4px 0; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
 </style>
 </head>
@@ -136,8 +136,8 @@ async function init() {
   scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x0a0a1a, 0.03);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
-  camera.position.set(-1, 0, 14);
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.set(-1, 0, 22);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -459,7 +459,7 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   if (ring) ring.material.color.setHex(GEN_COLORS[genIdx]);
 
   // Empire-based glow radius: larger empire = bigger halo
-  const empScale = 0.6 + (empireSize / 287) * 0.8;
+  const empScale = 0.6 + (empireSize / (boardData ? boardData.n_vertices : 287)) * 0.8;
   if (core) { core.userData = core.userData || {}; core.userData.empScale = empScale; }
   if (halo) halo.scale.setScalar(empScale * 1.5);
   if (outer) outer.scale.setScalar(empScale * 2.0);
@@ -627,17 +627,16 @@ function updateStep(step) {
     const log = historyData.step_log[step-1];
     if (log.records.length > 2) {
       const inter = log.records[log.records.length - 1];
-      const overlapPct = (inter.empire_overlap / 287 * 100).toFixed(0);
       document.getElementById('overlap-val').textContent = inter.empire_overlap;
-      document.getElementById('overlap-fill').style.width = overlapPct + '%';
+      document.getElementById('overlap-fill').style.width = Math.min(inter.empire_overlap / 3000 * 100, 100) + '%';
       document.getElementById('dist-val').textContent = inter.distance_3d.toFixed(2);
-      document.getElementById('dist-fill').style.width = Math.min(inter.distance_3d/6*100, 100) + '%';
+      document.getElementById('dist-fill').style.width = Math.min(inter.distance_3d / 10 * 100, 100) + '%';
     }
     if (log.records[0] && log.records[1]) {
       const sav0 = log.records[0].savings || 0;
       const sav1 = log.records[1].savings || 0;
       document.getElementById('sav1-val').textContent = sav0 + ' / ' + sav1;
-      document.getElementById('sav1-fill').style.width = (((sav0+sav1)/2)/180*100) + '%';
+      document.getElementById('sav1-fill').style.width = Math.min(((sav0+sav1)/2) / 1500 * 100, 100) + '%';
     }
   }
 

@@ -7,13 +7,14 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
 
-#main-canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 140px); }
+#main-canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 240px); overflow: hidden; z-index: 1; }
+#main-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
 
 /* Bottom bar */
 #bottom-bar {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 140px;
+  position: absolute; bottom: 0; left: 0; right: 0; height: 240px;
   display: flex; gap: 10px; padding: 10px 16px;
-  background: rgba(5,5,15,0.95);
+  background: rgb(5,5,15);
   border-top: 1px solid rgba(100,150,255,0.25);
   align-items: flex-start; z-index: 10;
 }
@@ -24,17 +25,22 @@ body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospac
 }
 
 /* Controls panel */
-#controls { min-width: 200px; }
+#controls { min-width: 220px; }
 #controls button {
   background: rgba(100,150,255,0.3); color: #fff; border: 1px solid rgba(100,150,255,0.5);
   padding: 6px 14px; margin: 2px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px;
 }
 #controls button:hover { background: rgba(100,150,255,0.5); }
 #controls button.active { background: rgba(100,200,100,0.5); border-color: rgba(100,200,100,0.7); }
+#controls button.mode-active { background: rgba(255,160,48,0.5); border-color: rgba(255,160,48,0.7); }
 .slider-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
 .slider-row label { color: #888; font-size: 11px; min-width: 80px; }
 .slider-row input[type=range] { width: 80px; }
 .slider-row .val { color: #fff; font-size: 11px; min-width: 30px; }
+select {
+  background: rgba(100,150,255,0.2); color: #fff; border: 1px solid rgba(100,150,255,0.4);
+  padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 11px; margin: 2px;
+}
 
 /* HUD */
 #hud { min-width: 260px; }
@@ -57,19 +63,39 @@ body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospac
 #status { position: absolute; top: 10px; right: 10px; font-size: 11px; z-index: 20; }
 .connected { color: #2ecc71; }
 .disconnected { color: #e74c3c; }
+
+/* Mode badge */
+#mode-badge {
+  position: absolute; top: 10px; left: 10px; font-size: 12px; z-index: 20;
+  padding: 4px 10px; border-radius: 4px; font-weight: bold;
+}
+.mode-segment { background: rgba(100,150,255,0.3); color: #88bbff; }
+.mode-helix { background: rgba(255,160,48,0.3); color: #f0a030; }
 </style>
 </head>
 <body>
 
-<div id="status" class="disconnected">● Disconnected</div>
+<div id="status" class="disconnected">Disconnected</div>
+<div id="mode-badge" class="mode-segment">SEGMENT</div>
 
 <div id="bottom-bar">
   <div class="panel" id="controls">
+    <div style="margin-bottom:4px;">
+      <button id="btn-mode-seg" class="mode-active" onclick="switchMode('segment')">SEGMENT</button>
+      <button id="btn-mode-helix" onclick="switchMode('helix')">HELIX</button>
+    </div>
+    <div id="helix-presets" style="display:none;margin-bottom:4px;">
+      <select id="preset-select">
+        <option value="teeter_totter">Teeter-Totter (L/R, exp=28)</option>
+        <option value="expansion_contraction">Expansion (L/L, exp=17)</option>
+        <option value="cycling_chasing">Cycling (L/L, exp=7)</option>
+      </select>
+    </div>
     <button id="btn-play" onclick="togglePlay()">PLAY</button>
     <button onclick="stepOnce()">STEP</button>
     <button onclick="resetSim()">RESET</button>
     <button onclick="zoomIn()">+</button>
-    <button onclick="zoomOut()">−</button>
+    <button onclick="zoomOut()">&minus;</button>
     <div class="slider-row">
       <label>Speed</label>
       <input type="range" id="speed" min="1" max="20" value="5">
@@ -79,7 +105,7 @@ body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospac
       <input type="range" id="pel" min="1" max="40" value="28" oninput="updateISV()">
       <span class="val" id="pel-val">28</span>
     </div>
-    <div class="slider-row">
+    <div class="slider-row" id="coupling-row">
       <label>Coupling</label>
       <input type="range" id="coupling" min="0" max="20" value="10" oninput="updateISV()">
       <span class="val" id="coupling-val">1.0</span>
@@ -87,25 +113,25 @@ body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospac
   </div>
 
   <div class="panel" id="hud">
-    <div id="clock0-info">Clock 0: connecting...</div>
-    <div id="clock1-info">Clock 1: connecting...</div>
+    <div id="clock0-info">E0: connecting...</div>
+    <div id="clock1-info">E1: connecting...</div>
     <hr style="border-color: rgba(100,150,255,0.15); margin: 4px 0;">
     <div id="step-info">Step 0</div>
   </div>
 
   <div class="panel" id="prob-panel">
-    <div style="color:#888;font-size:11px;margin-bottom:4px;">Savings Distribution (C0)</div>
+    <div style="color:#888;font-size:11px;margin-bottom:4px;">Savings Distribution (E0)</div>
     <canvas id="prob-canvas"></canvas>
   </div>
 
   <div class="panel" id="metrics">
-    <div class="metric-row"><span class="metric-label">Seg Overlap</span><span class="metric-val" id="m-overlap">0</span></div>
+    <div class="metric-row"><span class="metric-label" id="m-overlap-label">Seg Overlap</span><span class="metric-val" id="m-overlap">0</span></div>
     <div class="bar-track"><div class="bar-fill" id="bar-overlap" style="width:0%;background:#88bbff;"></div></div>
     <div class="metric-row"><span class="metric-label">Distance</span><span class="metric-val" id="m-dist">0</span></div>
     <div class="bar-track"><div class="bar-fill" id="bar-dist" style="width:0%;background:#f0a030;"></div></div>
-    <div class="metric-row"><span class="metric-label">C0 Savings</span><span class="metric-val" id="m-sav0">0</span></div>
+    <div class="metric-row"><span class="metric-label">E0 Savings</span><span class="metric-val" id="m-sav0">0</span></div>
     <div class="bar-track"><div class="bar-fill" id="bar-sav0" style="width:0%;background:#2ecc71;"></div></div>
-    <div class="metric-row"><span class="metric-label">C0 Efficiency</span><span class="metric-val" id="m-eff">0%</span></div>
+    <div class="metric-row"><span class="metric-label">E0 Efficiency</span><span class="metric-val" id="m-eff">0%</span></div>
     <div class="bar-track"><div class="bar-fill" id="bar-eff" style="width:0%;background:#e74c3c;"></div></div>
   </div>
 </div>
@@ -126,25 +152,36 @@ let vertexMeshes = [], segmentLines = null;
 let clock0Mesh, clock1Mesh;
 let playing = false;
 let animFrame = 0;
-let segColorArray = null;  // Float32Array for segment colors
-let segOpacityBase = 0.08; // dim default
+let segColorArray = null;
+let currentMode = 'segment'; // 'segment' or 'helix'
+
+// Helix mode state
+let helixTrail0 = null, helixTrail1 = null; // trail line objects
+let helixPath0 = null, helixPath1 = null;   // chosen helix path lines
+let trail0Points = [], trail1Points = [];    // position history
+const MAX_TRAIL = 200;
+let helixScatterGroup = null; // empire point cloud
 
 const CHI_PLUS = 0xf0a030;
 const CHI_MINUS = 0xa060f0;
 const OVERLAP_COLOR = 0xffffff;
 const FIG_SCALE = 1.0;
+const HELIX_SCALE = 0.15; // scale down helix coords to fit scene
 
 // === WEBSOCKET ===
 function connectWS() {
   ws = new WebSocket('ws://localhost:8765');
   ws.onopen = () => {
     document.getElementById('status').className = 'connected';
-    document.getElementById('status').textContent = '● Connected';
+    document.getElementById('status').textContent = 'Connected';
+    // Always start in segment mode on fresh connect
+    currentMode = 'segment';
+    updateModeBadge();
     ws.send(JSON.stringify({cmd: 'get_board'}));
   };
   ws.onclose = () => {
     document.getElementById('status').className = 'disconnected';
-    document.getElementById('status').textContent = '● Disconnected';
+    document.getElementById('status').textContent = 'Disconnected';
     setTimeout(connectWS, 2000);
   };
   ws.onmessage = (event) => {
@@ -153,6 +190,7 @@ function connectWS() {
     else if (msg.type === 'step' || msg.type === 'step_full') onStep(msg.data);
     else if (msg.type === 'state') onState(msg.data);
     else if (msg.type === 'reset') { onBoard(msg.board); onState(msg.state); }
+    else if (msg.type === 'helix_init') onHelixInit(msg.data);
   };
 }
 
@@ -163,7 +201,7 @@ function initScene() {
 
   const container = document.getElementById('main-canvas');
   const w = container.clientWidth, h = container.clientHeight;
-  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 200);
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 500);
   camera.position.set(0, 2, 12);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -174,39 +212,35 @@ function initScene() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.enableZoom = false;
+  controls.enableZoom = true;
 
   scene.add(new THREE.AmbientLight(0x334466, 0.5));
   const light = new THREE.PointLight(0x88bbff, 2, 30);
   light.position.set(3, 5, 3);
   scene.add(light);
 
-  // Clock orbs
+  // Emperor/Clock orbs — used in both modes
   const makeOrb = (color, idColor) => {
     const g = new THREE.Group();
-    // Core: changes with chirality
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(0.15, 24, 24),
       new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.9, transparent: true, opacity: 0.95 }));
     core.name = 'core';
     g.add(core);
-    // Halo: changes with chirality
     const halo = new THREE.Mesh(
       new THREE.SphereGeometry(0.28, 16, 16),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2 }));
     g.add(halo);
-    // Identity ring: ALWAYS this clock's color (never changes)
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.02, 8, 32),
       new THREE.MeshBasicMaterial({ color: idColor, transparent: true, opacity: 0.8 }));
     ring.rotation.x = Math.PI / 2;
     g.add(ring);
-    // Light
     g.add(new THREE.PointLight(color, 2, 5));
     return g;
   };
-  clock0Mesh = makeOrb(CHI_PLUS, CHI_PLUS);   // gold ring = always Clock 0
-  clock1Mesh = makeOrb(CHI_MINUS, CHI_MINUS);  // purple ring = always Clock 1
+  clock0Mesh = makeOrb(CHI_PLUS, CHI_PLUS);
+  clock1Mesh = makeOrb(CHI_MINUS, CHI_MINUS);
   scene.add(clock0Mesh);
   scene.add(clock1Mesh);
 
@@ -218,11 +252,17 @@ function initScene() {
   });
 }
 
-// === BUILD BOARD FROM SERVER DATA ===
-function onBoard(data) {
-  boardData = data;
+// ==============================================================
+//  SEGMENT MODE — board, empires, state
+// ==============================================================
 
-  // Clear old
+function onBoard(data) {
+  if (data.mode === 'helix') { onHelixBoard(data); return; }
+
+  boardData = data;
+  clearHelixObjects();
+
+  // Clear old segment objects
   vertexMeshes.forEach(m => scene.remove(m));
   vertexMeshes = [];
   if (segmentLines) scene.remove(segmentLines);
@@ -230,9 +270,7 @@ function onBoard(data) {
   const positions = data.positions_3d;
   const empSizes = data.vertex_empire_sizes;
   const maxEmp = Math.max(...empSizes);
-  const segEmpSizes = data.segment_empire_sizes;
 
-  // Vertices: small but visible, colored by empire size
   const vGeo = new THREE.SphereGeometry(0.02, 6, 6);
   positions.forEach((p, i) => {
     const r = empSizes[i] / maxEmp;
@@ -245,15 +283,13 @@ function onBoard(data) {
     vertexMeshes.push(m);
   });
 
-  // Segments as lines — colors updated dynamically to show empires
   const segPos = [];
   const nSegs = data.segments.length;
-  segColorArray = new Float32Array(nSegs * 6);  // 2 vertices × RGB per segment
+  segColorArray = new Float32Array(nSegs * 6);
   data.segments.forEach(([a, b], si) => {
     const pa = positions[a], pb = positions[b];
     segPos.push(pa[0]*FIG_SCALE, pa[1]*FIG_SCALE, pa[2]*FIG_SCALE);
     segPos.push(pb[0]*FIG_SCALE, pb[1]*FIG_SCALE, pb[2]*FIG_SCALE);
-    // Default dim color
     const base = 0.06;
     segColorArray[si*6+0] = base; segColorArray[si*6+1] = base; segColorArray[si*6+2] = base + 0.04;
     segColorArray[si*6+3] = base; segColorArray[si*6+4] = base; segColorArray[si*6+5] = base + 0.04;
@@ -266,16 +302,13 @@ function onBoard(data) {
   scene.add(segmentLines);
 
   console.log(`Board loaded: ${data.n_vertices} verts, ${data.n_segments} segments`);
-
-  // Request initial state
   ws.send(JSON.stringify({cmd: 'get_state'}));
 }
 
-// === EMPIRE FIELD VISUALIZATION ===
-// Target colors for smooth blending, plus previous state for change detection
+// Empire field visualization (segment mode only)
 let segTargetColors = null;
-let segPrevEmpireState = null;  // 0=none, 1=c0, 2=c1, 3=overlap per segment
-let segFlashTimer = null;       // per-segment flash countdown
+let segPrevEmpireState = null;
+let segFlashTimer = null;
 
 function updateEmpireField(empires) {
   if (!segColorArray || !segmentLines || !empires || !boardData) return;
@@ -296,96 +329,264 @@ function updateEmpireField(empires) {
     else if (c1set.has(si)) curState[si] = 2;
     else curState[si] = 0;
 
-    // Detect state change for flash
-    if (segPrevEmpireState[si] !== curState[si]) {
-      segFlashTimer[si] = 1.0;
-    }
+    if (segPrevEmpireState[si] !== curState[si]) segFlashTimer[si] = 1.0;
 
     let r = 0, g = 0, bl = 0;
+    if (curState[si] === 3) { r = 0.95; g = 0.95; bl = 1.0; }
+    else if (curState[si] === 1) { r = 0.85; g = 0.55; bl = 0.12; }
+    else if (curState[si] === 2) { r = 0.55; g = 0.20; bl = 0.85; }
+    else { r = 0.015; g = 0.015; bl = 0.025; }
 
-    if (curState[si] === 3) {
-      // OVERLAP: bright white — the contested territory
-      r = 0.95; g = 0.95; bl = 1.0;
-    } else if (curState[si] === 1) {
-      // C0 EMPIRE: strong gold
-      r = 0.85; g = 0.55; bl = 0.12;
-    } else if (curState[si] === 2) {
-      // C1 EMPIRE: strong purple
-      r = 0.55; g = 0.20; bl = 0.85;
-    } else {
-      // NOT IN EMPIRE: nearly invisible
-      r = 0.015; g = 0.015; bl = 0.025;
-    }
-
-    // Flash on change: bright burst
     if (segFlashTimer[si] > 0) {
       const f = segFlashTimer[si];
       if (curState[si] > 0 && segPrevEmpireState[si] === 0) {
-        // GAINED: flash bright green
         r = Math.min(r + f * 0.5, 1); g = Math.min(g + f * 1.0, 1); bl = Math.min(bl + f * 0.3, 1);
       } else if (curState[si] === 0 && segPrevEmpireState[si] > 0) {
-        // LOST: flash bright red
         r = Math.min(r + f * 1.0, 1); g = Math.min(g + f * 0.15, 1); bl = Math.min(bl + f * 0.1, 1);
       } else {
-        // TERRITORY SWAP: flash bright white
         r = Math.min(r + f * 0.6, 1); g = Math.min(g + f * 0.6, 1); bl = Math.min(bl + f * 0.6, 1);
       }
     }
 
     segTargetColors[si*6+0] = r; segTargetColors[si*6+1] = g; segTargetColors[si*6+2] = bl;
     segTargetColors[si*6+3] = r; segTargetColors[si*6+4] = g; segTargetColors[si*6+5] = bl;
-  }
 
+    // Also apply directly to segColorArray for immediate visual feedback
+    segColorArray[si*6+0] = r; segColorArray[si*6+1] = g; segColorArray[si*6+2] = bl;
+    segColorArray[si*6+3] = r; segColorArray[si*6+4] = g; segColorArray[si*6+5] = bl;
+  }
   segPrevEmpireState.set(curState);
+
+  // Force immediate GPU update
+  if (segmentLines) segmentLines.geometry.attributes.color.needsUpdate = true;
 }
 
 function blendSegmentColors() {
-  // Called every animation frame — smoothly blend toward target colors
   if (!segColorArray || !segTargetColors || !segmentLines) return;
   const n = segColorArray.length;
-  const speed = 0.25;  // blend rate — fast snap for dramatic effect
+  const speed = 0.25;
   let changed = false;
-
   for (let i = 0; i < n; i++) {
     const diff = segTargetColors[i] - segColorArray[i];
-    if (Math.abs(diff) > 0.001) {
-      segColorArray[i] += diff * speed;
-      changed = true;
-    }
+    if (Math.abs(diff) > 0.001) { segColorArray[i] += diff * speed; changed = true; }
   }
-
-  // Decay flash timers
   if (segFlashTimer) {
     for (let i = 0; i < segFlashTimer.length; i++) {
-      if (segFlashTimer[i] > 0) {
-        segFlashTimer[i] -= 0.03;
-        if (segFlashTimer[i] < 0) segFlashTimer[i] = 0;
-      }
+      if (segFlashTimer[i] > 0) { segFlashTimer[i] -= 0.03; if (segFlashTimer[i] < 0) segFlashTimer[i] = 0; }
     }
   }
+  if (changed) segmentLines.geometry.attributes.color.needsUpdate = true;
+}
 
-  if (changed) {
-    segmentLines.geometry.attributes.color.needsUpdate = true;
+// ==============================================================
+//  HELIX MODE — init, board, trails, paths
+// ==============================================================
+
+let helixDistLine = null; // line between emperors
+let zoomMultiplier = 1.0; // user zoom adjustment
+
+function clearHelixObjects() {
+  if (helixTrail0) { scene.remove(helixTrail0); helixTrail0 = null; }
+  if (helixTrail1) { scene.remove(helixTrail1); helixTrail1 = null; }
+  if (helixPath0) { scene.remove(helixPath0); helixPath0 = null; }
+  if (helixPath1) { scene.remove(helixPath1); helixPath1 = null; }
+  if (helixScatterGroup) { scene.remove(helixScatterGroup); helixScatterGroup = null; }
+  if (helixDistLine) { scene.remove(helixDistLine); helixDistLine = null; }
+  trail0Points = [];
+  trail1Points = [];
+}
+
+function clearSegmentObjects() {
+  vertexMeshes.forEach(m => scene.remove(m));
+  vertexMeshes = [];
+  if (segmentLines) { scene.remove(segmentLines); segmentLines = null; }
+  segColorArray = null;
+  segTargetColors = null;
+  segPrevEmpireState = null;
+  segFlashTimer = null;
+}
+
+function onHelixInit(data) {
+  currentMode = 'helix';
+  boardData = { mode: 'helix', ...data };
+  clearSegmentObjects();
+  clearHelixObjects();
+  helixSavingsHistory = [[], []]; // reset sparkline
+  updateModeBadge();
+
+  // Set camera farther out for helix scale
+  camera.position.set(0, 3, 20);
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+
+  // Place emperors at initial positions
+  if (data.emperors && data.emperors.length >= 2) {
+    const p0 = data.emperors[0].position;
+    const p1 = data.emperors[1].position;
+    clock0Mesh.position.set(p0[0]*HELIX_SCALE, p0[1]*HELIX_SCALE, p0[2]*HELIX_SCALE);
+    clock1Mesh.position.set(p1[0]*HELIX_SCALE, p1[1]*HELIX_SCALE, p1[2]*HELIX_SCALE);
+    trail0Points = [new THREE.Vector3(p0[0]*HELIX_SCALE, p0[1]*HELIX_SCALE, p0[2]*HELIX_SCALE)];
+    trail1Points = [new THREE.Vector3(p1[0]*HELIX_SCALE, p1[1]*HELIX_SCALE, p1[2]*HELIX_SCALE)];
+  }
+
+  // Scale down emperor orbs for helix mode
+  clock0Mesh.scale.setScalar(0.3);
+  clock1Mesh.scale.setScalar(0.3);
+
+  // Request empire crystal for background
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({cmd: 'get_board'}));
+  }
+
+  // Update HUD
+  document.getElementById('step-info').textContent = `Step 0 | HELIX MODE | empire: ${data.empire_size || '?'} pts`;
+}
+
+function onHelixBoard(data) {
+  // Build a wireframe crystal from FIG vertices — connect nearby points with edges
+  if (data.empire_positions && data.empire_positions.length > 0) {
+    if (helixScatterGroup) { scene.remove(helixScatterGroup); helixScatterGroup = null; }
+
+    helixScatterGroup = new THREE.Group();
+    const pts = data.empire_positions;
+    const scaled = pts.map(p => [p[0]*HELIX_SCALE, p[1]*HELIX_SCALE, p[2]*HELIX_SCALE]);
+
+    // Vertex dots — tiny, sharp
+    const dotPositions = new Float32Array(scaled.length * 3);
+    for (let i = 0; i < scaled.length; i++) {
+      dotPositions[i*3] = scaled[i][0];
+      dotPositions[i*3+1] = scaled[i][1];
+      dotPositions[i*3+2] = scaled[i][2];
+    }
+    const dotGeo = new THREE.BufferGeometry();
+    dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(dotPositions, 3));
+    const dots = new THREE.Points(dotGeo, new THREE.PointsMaterial({
+      color: 0x6688aa, size: 1.5, transparent: true, opacity: 0.5,
+      sizeAttenuation: false, depthWrite: false
+    }));
+    helixScatterGroup.add(dots);
+
+    // Edges — connect vertices within a threshold distance
+    // Use a spatial grid for efficiency
+    const threshold = 1.2 * HELIX_SCALE; // ~0.18 scene units
+    const edgePositions = [];
+    const N = Math.min(scaled.length, 3000); // cap for performance
+
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = scaled[i][0] - scaled[j][0];
+        if (Math.abs(dx) > threshold) continue;
+        const dy = scaled[i][1] - scaled[j][1];
+        if (Math.abs(dy) > threshold) continue;
+        const dz = scaled[i][2] - scaled[j][2];
+        const d2 = dx*dx + dy*dy + dz*dz;
+        if (d2 < threshold * threshold) {
+          edgePositions.push(scaled[i][0], scaled[i][1], scaled[i][2]);
+          edgePositions.push(scaled[j][0], scaled[j][1], scaled[j][2]);
+        }
+      }
+    }
+
+    if (edgePositions.length > 0) {
+      const edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+      const edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({
+        color: 0x334466, transparent: true, opacity: 0.12, depthWrite: false
+      }));
+      helixScatterGroup.add(edges);
+    }
+
+    scene.add(helixScatterGroup);
+    console.log(`Crystal: ${scaled.length} vertices, ${edgePositions.length/6|0} edges`);
   }
 }
 
-// === UPDATE FROM STEP ===
-function onStep(data) {
-  onState(data);
+function updateHelixTrails() {
+  // Rebuild trail lines from point arrays
+  if (helixTrail0) scene.remove(helixTrail0);
+  if (helixTrail1) scene.remove(helixTrail1);
 
-  // Update empire field visualization
-  if (data.empires) {
-    updateEmpireField(data.empires);
+  if (trail0Points.length >= 2) {
+    const geo0 = new THREE.BufferGeometry().setFromPoints(trail0Points);
+    helixTrail0 = new THREE.Line(geo0, new THREE.LineBasicMaterial({
+      color: CHI_PLUS, transparent: true, opacity: 0.6, linewidth: 2 }));
+    scene.add(helixTrail0);
   }
+  if (trail1Points.length >= 2) {
+    const geo1 = new THREE.BufferGeometry().setFromPoints(trail1Points);
+    helixTrail1 = new THREE.Line(geo1, new THREE.LineBasicMaterial({
+      color: CHI_MINUS, transparent: true, opacity: 0.6, linewidth: 2 }));
+    scene.add(helixTrail1);
+  }
+}
 
-  // Update probability histogram
-  if (data.step_data) {
+function drawHelixPath(pathData, colorHex) {
+  if (!pathData || pathData.length < 2) return null;
+  const points = pathData.map(p => new THREE.Vector3(p[0]*HELIX_SCALE, p[1]*HELIX_SCALE, p[2]*HELIX_SCALE));
+
+  const group = new THREE.Group();
+
+  // Thick tube along the helix path
+  const curve = new THREE.CatmullRomCurve3(points);
+  const tubeGeo = new THREE.TubeGeometry(curve, points.length * 4, 0.03, 6, false);
+  const tubeMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.8 });
+  group.add(new THREE.Mesh(tubeGeo, tubeMat));
+
+  // Glowing vertex dots at each helix step
+  const dotGeo = new THREE.SphereGeometry(0.05, 8, 8);
+  const dotMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.9 });
+  points.forEach(p => {
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.copy(p);
+    group.add(dot);
+  });
+
+  // Endpoint marker (bright, larger)
+  const endGeo = new THREE.SphereGeometry(0.07, 8, 8);
+  const endMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+  const endDot = new THREE.Mesh(endGeo, endMat);
+  endDot.position.copy(points[points.length - 1]);
+  group.add(endDot);
+
+  return group;
+}
+
+function updateDistanceLine() {
+  // Draw/update a dashed line between the two emperors
+  if (helixDistLine) { scene.remove(helixDistLine); helixDistLine = null; }
+  const p0 = clock0Mesh.position.clone();
+  const p1 = clock1Mesh.position.clone();
+  if (p0.distanceTo(p1) < 0.001) return;
+
+  const geo = new THREE.BufferGeometry().setFromPoints([p0, p1]);
+  helixDistLine = new THREE.Line(geo, new THREE.LineDashedMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.3,
+    dashSize: 0.15, gapSize: 0.1
+  }));
+  helixDistLine.computeLineDistances();
+  scene.add(helixDistLine);
+}
+
+// ==============================================================
+//  UNIFIED UPDATE HANDLERS
+// ==============================================================
+
+function onStep(data) {
+  // Route based on currentMode only — server data format follows the mode
+  if (currentMode === 'helix') {
+    onHelixStep(data);
+  } else {
+    onSegmentStep(data);
+  }
+}
+
+function onSegmentStep(data) {
+  onState(data);
+  if (data.empires) updateEmpireField(data.empires);
+
+  if (data.step_data && data.step_data.clocks) {
     const cd0 = data.step_data.clocks[0];
-    if (cd0.all_options) {
-      drawHistogram(cd0.all_options);
-    }
+    if (cd0.all_options) drawHistogram(cd0.all_options);
 
-    // Update metrics
     document.getElementById('m-sav0').textContent = cd0.savings;
     document.getElementById('bar-sav0').style.width = (cd0.savings / 1500 * 100) + '%';
 
@@ -403,32 +604,143 @@ function onStep(data) {
   }
 }
 
-function onState(data) {
-  if (!boardData || !data.clocks) return;
-  const positions = boardData.positions_3d;
+function onHelixStep(data) {
+  const stepData = data.step_data || data.last_step;
+  if (!stepData) return;
 
-  data.clocks.forEach((sn, ci) => {
-    const mesh = ci === 0 ? clock0Mesh : clock1Mesh;
-    const p = positions[sn.vertex];
-    mesh.position.set(p[0] * FIG_SCALE, p[1] * FIG_SCALE, p[2] * FIG_SCALE);
+  const emps = stepData.emperors || [];
 
-    const chiColor = sn.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+  // Update emperor positions
+  emps.forEach((ed, ei) => {
+    const mesh = ei === 0 ? clock0Mesh : clock1Mesh;
+    const pos = ed.to || (ed.snapshot && ed.snapshot.position);
+    if (!pos) return;
+    mesh.position.set(pos[0]*HELIX_SCALE, pos[1]*HELIX_SCALE, pos[2]*HELIX_SCALE);
+
+    // Update chirality color
+    const chi = ed.snapshot ? ed.snapshot.chirality : 'L';
+    const chiColor = chi === 'L' ? CHI_PLUS : CHI_MINUS;
     const core = mesh.getObjectByName('core');
-    if (core) {
-      core.material.color.setHex(chiColor);
-      core.material.emissive.setHex(chiColor);
-    }
+    if (core) { core.material.color.setHex(chiColor); core.material.emissive.setHex(chiColor); }
+
+    // Add to trail
+    const trail = ei === 0 ? trail0Points : trail1Points;
+    trail.push(new THREE.Vector3(pos[0]*HELIX_SCALE, pos[1]*HELIX_SCALE, pos[2]*HELIX_SCALE));
+    if (trail.length > MAX_TRAIL) trail.shift();
   });
 
+  updateHelixTrails();
+
+  // Draw chosen helix path for each emperor
+  if (helixPath0) { scene.remove(helixPath0); helixPath0 = null; }
+  if (helixPath1) { scene.remove(helixPath1); helixPath1 = null; }
+
+  if (emps[0] && emps[0].chosen_segment) {
+    helixPath0 = drawHelixPath(emps[0].chosen_segment, 0xffcc44);
+    if (helixPath0) scene.add(helixPath0);
+  }
+  if (emps[1] && emps[1].chosen_segment) {
+    helixPath1 = drawHelixPath(emps[1].chosen_segment, 0xcc88ff);
+    if (helixPath1) scene.add(helixPath1);
+  }
+
   // Update HUD
-  const chiStr = (c) => c.chirality > 0 ? '<span class="chi-plus">+</span>' : '<span class="chi-minus">−</span>';
-  const c0 = data.clocks[0], c1 = data.clocks[1];
+  const step = data.step || stepData.step || '?';
+  const e0 = emps[0] || {};
+  const e1 = emps[1] || {};
+  const sn0 = e0.snapshot || {};
+  const sn1 = e1.snapshot || {};
+
+  const chiLabel = (c) => c === 'L' ? '<span class="chi-plus">L</span>' : '<span class="chi-minus">R</span>';
   document.getElementById('clock0-info').innerHTML =
-    `<span class="chi-plus">■</span> C0 v${c0.vertex} χ=${chiStr(c0)} L${c0.generation} φ=${c0.coxeter_phase}`;
+    `<span class="chi-plus">E0</span> chi=${chiLabel(sn0.chirality)} sav=${e0.savings || 0} opts=${e0.n_options || '?'}`;
   document.getElementById('clock1-info').innerHTML =
-    `<span class="chi-minus">■</span> C1 v${c1.vertex} χ=${chiStr(c1)} L${c1.generation} φ=${c1.coxeter_phase}`;
+    `<span class="chi-minus">E1</span> chi=${chiLabel(sn1.chirality)} sav=${e1.savings || 0} opts=${e1.n_options || '?'}`;
+
+  const empire_size = (data.empire_size || boardData?.empire_size || '?');
   document.getElementById('step-info').textContent =
-    `Step ${data.step} | h=30=2×3×5 | ${boardData.n_segments} segments`;
+    `Step ${step} | HELIX | empire: ${empire_size} pts`;
+
+  // Metrics
+  document.getElementById('m-sav0').textContent = e0.savings || 0;
+  document.getElementById('bar-sav0').style.width = ((e0.savings || 0) / 20 * 100) + '%';
+
+  const bestSav = e0.best_savings || 1;
+  const eff = bestSav > 0 ? ((e0.savings || 0) / bestSav * 100).toFixed(0) : 0;
+  document.getElementById('m-eff').textContent = eff + '%';
+  document.getElementById('bar-eff').style.width = eff + '%';
+
+  if (stepData.interaction) {
+    const inter = stepData.interaction;
+    document.getElementById('m-overlap').textContent = inter.chirality_match ? 'same' : 'opp';
+    document.getElementById('bar-overlap').style.width = '0%';
+    document.getElementById('m-dist').textContent = inter.distance.toFixed(2);
+    document.getElementById('bar-dist').style.width = Math.min(inter.distance / 50 * 100, 100) + '%';
+  }
+
+  // Draw helix savings histogram
+  drawHelixHistogram(emps);
+
+  // Distance line between emperors
+  updateDistanceLine();
+
+  // Keep camera and point cloud centered on emperors
+  centerViewOnEmperors();
+}
+
+function centerViewOnEmperors() {
+  const mid = new THREE.Vector3().addVectors(clock0Mesh.position, clock1Mesh.position).multiplyScalar(0.5);
+
+  // Keep point cloud centered on midpoint — emperors always traverse through it
+  if (helixScatterGroup) {
+    helixScatterGroup.position.lerp(mid, 0.15);
+  }
+
+  // Smoothly move orbit controls target toward midpoint
+  if (controls) {
+    controls.target.lerp(mid, 0.08);
+  }
+
+  // Auto-zoom: keep both emperors in view, respecting user zoom
+  const dist = clock0Mesh.position.distanceTo(clock1Mesh.position);
+  const desiredCamDist = Math.max(dist * 2.5, 5) * zoomMultiplier;
+  const camDir = camera.position.clone().sub(controls.target).normalize();
+  const targetCamPos = controls.target.clone().add(camDir.multiplyScalar(desiredCamDist));
+  camera.position.lerp(targetCamPos, 0.05);
+}
+
+function onState(data) {
+  // Segment mode state
+  if (data.clocks && boardData && boardData.positions_3d) {
+    const positions = boardData.positions_3d;
+    data.clocks.forEach((sn, ci) => {
+      const mesh = ci === 0 ? clock0Mesh : clock1Mesh;
+      const p = positions[sn.vertex];
+      mesh.position.set(p[0] * FIG_SCALE, p[1] * FIG_SCALE, p[2] * FIG_SCALE);
+      const chiColor = sn.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+      const core = mesh.getObjectByName('core');
+      if (core) { core.material.color.setHex(chiColor); core.material.emissive.setHex(chiColor); }
+    });
+
+    const chiStr = (c) => c.chirality > 0 ? '<span class="chi-plus">+</span>' : '<span class="chi-minus">&minus;</span>';
+    const c0 = data.clocks[0], c1 = data.clocks[1];
+    document.getElementById('clock0-info').innerHTML =
+      `<span class="chi-plus">C0</span> v${c0.vertex} chi=${chiStr(c0)} L${c0.generation} phi=${c0.coxeter_phase}`;
+    document.getElementById('clock1-info').innerHTML =
+      `<span class="chi-minus">C1</span> v${c1.vertex} chi=${chiStr(c1)} L${c1.generation} phi=${c1.coxeter_phase}`;
+    document.getElementById('step-info').textContent =
+      `Step ${data.step} | SEGMENT | ${boardData.n_segments} segments`;
+  }
+
+  // Helix mode state
+  if (data.mode === 'helix' && data.emperors) {
+    data.emperors.forEach((sn, ei) => {
+      const mesh = ei === 0 ? clock0Mesh : clock1Mesh;
+      const p = sn.position;
+      mesh.position.set(p[0]*HELIX_SCALE, p[1]*HELIX_SCALE, p[2]*HELIX_SCALE);
+    });
+  }
+
   document.getElementById('pel-val').textContent = document.getElementById('pel').value;
   document.getElementById('coupling-val').textContent = (document.getElementById('coupling').value / 10).toFixed(1);
 }
@@ -439,28 +751,68 @@ function drawHistogram(options) {
   const ctx = canvas.getContext('2d');
   canvas.width = 200; canvas.height = 100;
   ctx.clearRect(0, 0, 200, 100);
-
   if (!options || options.length === 0) return;
 
-  const maxSav = Math.max(...options.map(o => o.savings));
   const barW = Math.max(2, Math.floor(180 / options.length));
-
   options.forEach((opt, i) => {
     const h = (opt.probability) * 90;
     const x = 10 + i * (barW + 1);
-    // Color by rank
     if (opt.rank === 1) ctx.fillStyle = '#2ecc71';
     else if (opt.rank <= 3) ctx.fillStyle = '#f0a030';
     else ctx.fillStyle = '#445566';
     ctx.fillRect(x, 100 - h, barW, h);
-    // Savings label
     ctx.fillStyle = '#888';
     ctx.font = '7px monospace';
     ctx.fillText(opt.savings, x, 97 - h);
   });
+}
 
-  // Mark the chosen one
-  const chosen = options.find(o => o.rank === options.find(x => x.vertex === options[0]?.vertex)?.rank);
+// Helix mode: show savings bars for both emperors + history sparkline
+let helixSavingsHistory = [[], []]; // rolling history per emperor
+
+function drawHelixHistogram(emps) {
+  const canvas = document.getElementById('prob-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 200; canvas.height = 100;
+  ctx.clearRect(0, 0, 200, 100);
+  if (!emps || emps.length === 0) return;
+
+  // Add to history
+  emps.forEach((e, i) => {
+    if (i < 2) {
+      helixSavingsHistory[i].push(e.savings || 0);
+      if (helixSavingsHistory[i].length > 60) helixSavingsHistory[i].shift();
+    }
+  });
+
+  // Draw sparkline for each emperor
+  const colors = ['#f0a030', '#a060f0'];
+  const maxSav = Math.max(1, ...helixSavingsHistory[0], ...helixSavingsHistory[1]);
+
+  for (let ei = 0; ei < 2; ei++) {
+    const hist = helixSavingsHistory[ei];
+    if (hist.length < 2) continue;
+    ctx.strokeStyle = colors[ei];
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    hist.forEach((v, i) => {
+      const x = 5 + (i / 59) * 190;
+      const y = 95 - (v / maxSav) * 85;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+
+  // Labels
+  ctx.fillStyle = '#888';
+  ctx.font = '8px monospace';
+  ctx.fillText('E0: ' + (emps[0]?.savings || 0), 5, 10);
+  ctx.fillStyle = '#666';
+  ctx.fillText('E1: ' + (emps[1]?.savings || 0), 105, 10);
+  ctx.fillStyle = '#555';
+  ctx.fillText('max: ' + maxSav, 150, 95);
 }
 
 // === ANIMATION ===
@@ -469,28 +821,96 @@ function animate() {
   animFrame++;
   controls.update();
 
-  // Auto-play
   if (playing && ws && ws.readyState === 1) {
     const speed = parseInt(document.getElementById('speed').value);
     const interval = Math.max(10, 130 - speed * 6);
     if (animFrame % interval === 0) {
-      ws.send(JSON.stringify({cmd: 'step_with_options'}));
+      if (currentMode === 'segment') {
+        ws.send(JSON.stringify({cmd: 'step_with_options'}));
+      } else {
+        ws.send(JSON.stringify({cmd: 'step'}));
+      }
     }
   }
 
-  // Smooth empire color blending every frame
-  blendSegmentColors();
+  // Segment mode: smooth empire color blending
+  if (currentMode === 'segment') blendSegmentColors();
 
-  // Gentle pulse on clocks
+  // Helix mode: fade old path lines + rotate point cloud
+  if (currentMode === 'helix') {
+    // Paths are Groups now, not Lines — fade the tube children
+    [helixPath0, helixPath1].forEach(p => {
+      if (p) p.children.forEach(c => {
+        if (c.material && c.material.opacity > 0.15) c.material.opacity -= 0.003;
+      });
+    });
+    // Keep view centered on emperors every frame
+    centerViewOnEmperors();
+  }
+
+  // Gentle pulse on emperor orbs
+  const baseScale = currentMode === 'helix' ? 0.3 : 1.0;
   [clock0Mesh, clock1Mesh].forEach(m => {
-    const p = 1 + 0.08 * Math.sin(animFrame * 0.04);
+    const p = baseScale * (1 + 0.08 * Math.sin(animFrame * 0.04));
     m.scale.setScalar(p);
   });
 
   renderer.render(scene, camera);
 }
 
+// === MODE SWITCHING ===
+function updateModeBadge() {
+  const badge = document.getElementById('mode-badge');
+  if (currentMode === 'helix') {
+    badge.textContent = 'HELIX';
+    badge.className = 'mode-helix';
+    document.getElementById('m-overlap-label').textContent = 'Chirality';
+    document.getElementById('helix-presets').style.display = 'block';
+    document.getElementById('coupling-row').style.display = 'none';
+    document.getElementById('btn-mode-seg').classList.remove('mode-active');
+    document.getElementById('btn-mode-helix').classList.add('mode-active');
+  } else {
+    badge.textContent = 'SEGMENT';
+    badge.className = 'mode-segment';
+    document.getElementById('m-overlap-label').textContent = 'Seg Overlap';
+    document.getElementById('helix-presets').style.display = 'none';
+    document.getElementById('coupling-row').style.display = 'flex';
+    document.getElementById('btn-mode-seg').classList.add('mode-active');
+    document.getElementById('btn-mode-helix').classList.remove('mode-active');
+  }
+}
+
 // === CONTROLS ===
+window.switchMode = (mode) => {
+  if (mode === currentMode) return;
+  playing = false;
+  document.getElementById('btn-play').textContent = 'PLAY';
+  document.getElementById('btn-play').classList.remove('active');
+
+  // Clear everything from the old mode first
+  clearSegmentObjects();
+  clearHelixObjects();
+
+  currentMode = mode;
+  updateModeBadge();
+
+  if (ws && ws.readyState === 1) {
+    if (mode === 'helix') {
+      camera.position.set(0, 3, 20);
+      scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+      const preset = document.getElementById('preset-select').value;
+      ws.send(JSON.stringify({cmd: 'init_helix', preset}));
+    } else {
+      camera.position.set(0, 2, 12);
+      scene.fog = new THREE.FogExp2(0x0a0a1a, 0.02);
+      clock0Mesh.scale.setScalar(1.0);
+      clock1Mesh.scale.setScalar(1.0);
+      // Reset server to segment mode, which sends board + state
+      ws.send(JSON.stringify({cmd: 'reset'}));
+    }
+  }
+};
+
 window.togglePlay = () => {
   playing = !playing;
   document.getElementById('btn-play').textContent = playing ? 'PAUSE' : 'PLAY';
@@ -499,15 +919,26 @@ window.togglePlay = () => {
 
 window.stepOnce = () => {
   if (ws && ws.readyState === 1) {
-    ws.send(JSON.stringify({cmd: 'step_with_options'}));
+    if (currentMode === 'segment') {
+      ws.send(JSON.stringify({cmd: 'step_with_options'}));
+    } else {
+      ws.send(JSON.stringify({cmd: 'step'}));
+    }
   }
 };
 
 window.resetSim = () => {
   playing = false;
   document.getElementById('btn-play').textContent = 'PLAY';
+  document.getElementById('btn-play').classList.remove('active');
   if (ws && ws.readyState === 1) {
-    ws.send(JSON.stringify({cmd: 'reset'}));
+    if (currentMode === 'helix') {
+      clearHelixObjects();
+      const preset = document.getElementById('preset-select').value;
+      ws.send(JSON.stringify({cmd: 'init_helix', preset}));
+    } else {
+      ws.send(JSON.stringify({cmd: 'reset'}));
+    }
   }
 };
 
@@ -523,16 +954,29 @@ window.updateISV = () => {
 };
 
 window.zoomIn = () => {
+  zoomMultiplier = Math.max(0.2, zoomMultiplier * 0.8);
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
-  camera.position.addScaledVector(dir, 1);
+  camera.position.addScaledVector(dir, currentMode === 'helix' ? 3 : 1);
 };
 
 window.zoomOut = () => {
+  zoomMultiplier = Math.min(5.0, zoomMultiplier * 1.25);
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
-  camera.position.addScaledVector(dir, -1);
+  camera.position.addScaledVector(dir, currentMode === 'helix' ? -3 : -1);
 };
+
+// Preset change triggers re-init
+document.getElementById('preset-select').addEventListener('change', () => {
+  if (currentMode === 'helix' && ws && ws.readyState === 1) {
+    playing = false;
+    document.getElementById('btn-play').textContent = 'PLAY';
+    clearHelixObjects();
+    const preset = document.getElementById('preset-select').value;
+    ws.send(JSON.stringify({cmd: 'init_helix', preset}));
+  }
+});
 
 // === INIT ===
 const container = document.createElement('div');

@@ -81,7 +81,7 @@ class HelixGame:
     determined by empire savings (hash-table overlap counting).
     """
 
-    def __init__(self, empire_radius=5000, neighborhood_radius=500,
+    def __init__(self, empire_radius=8, neighborhood_radius=500,
                  cylinder_length=1000, verbose=True):
         t0 = time.time()
 
@@ -91,6 +91,7 @@ class HelixGame:
 
         if verbose:
             print(f"Generating FIG empire vertices (radius={empire_radius})...")
+        self.empire_radius = empire_radius
         self.empire = self.grid.vertices([0, 0, 0], empire_radius)
         if verbose:
             print(f"  Empire: {len(self.empire)} vertices")
@@ -127,7 +128,7 @@ class HelixGame:
                 fig_vertices=self.empire,
                 n_wafers=20,
                 segment_length=6,
-                pent_radius=1.0,
+                pent_radius=0.25,
             )
             if chirality == 'L':
                 self._segment_cache[key] = segments_L

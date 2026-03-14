@@ -81,7 +81,7 @@ def get_board_data():
     }
 
 
-def init_helix_game(preset_name=None, config=None, empire_radius=5000):
+def init_helix_game(preset_name=None, config=None, empire_radius=8):
     """Initialize helix mode simulation."""
     global helix_game, mode
     mode = 'helix'
@@ -109,7 +109,7 @@ def init_helix_game(preset_name=None, config=None, empire_radius=5000):
 
 
 async def handle(websocket):
-    global mode
+    global mode, helix_game
     print(f"Client connected")
     try:
         async for message in websocket:
@@ -119,7 +119,7 @@ async def handle(websocket):
             if cmd == 'init_helix':
                 preset = data.get('preset')
                 config = data.get('config')
-                empire_radius = data.get('empire_radius', 5000)
+                empire_radius = data.get('empire_radius', 8)
                 init_helix_game(preset_name=preset, config=config,
                               empire_radius=empire_radius)
                 state = helix_game.get_state()
@@ -137,7 +137,7 @@ async def handle(websocket):
                         'data': {
                             'mode': 'helix',
                             'empire_size': len(helix_game.empire),
-                            'empire_positions': helix_game.empire[:500].tolist(),
+                            'empire_positions': helix_game.empire[::2].tolist(),  # every 2nd point (~9K)
                             'emperors': [e.snapshot() for e in helix_game.emperors],
                         }
                     }, cls=NpEncoder))
@@ -188,23 +188,32 @@ async def handle(websocket):
                     await websocket.send(json.dumps({'type': 'step', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'step_with_options':
-                step_data = game.step()
-                state = game.get_state()
-                state['step_data'] = step_data
-                c0v = game.clocks[0].vertex
-                c1v = game.clocks[1].vertex
-                emp0 = game.empire.segment_empire[c0v]
-                emp1 = game.empire.segment_empire[c1v]
-                overlap = emp0 & emp1
-                state['empires'] = {
-                    'c0_segments': list(emp0 - overlap),
-                    'c1_segments': list(emp1 - overlap),
-                    'overlap_segments': list(overlap),
-                    'c0_size': len(emp0),
-                    'c1_size': len(emp1),
-                    'overlap_size': len(overlap),
-                }
-                await websocket.send(json.dumps({'type': 'step_full', 'data': state}, cls=NpEncoder))
+                if mode == 'helix' and helix_game:
+                    # In helix mode, step_with_options behaves like step
+                    step_data = helix_game.step()
+                    state = helix_game.get_state()
+                    state['step_data'] = step_data
+                    await websocket.send(json.dumps({
+                        'type': 'step', 'data': state
+                    }, cls=NpEncoder))
+                else:
+                    step_data = game.step()
+                    state = game.get_state()
+                    state['step_data'] = step_data
+                    c0v = game.clocks[0].vertex
+                    c1v = game.clocks[1].vertex
+                    emp0 = game.empire.segment_empire[c0v]
+                    emp1 = game.empire.segment_empire[c1v]
+                    overlap = emp0 & emp1
+                    state['empires'] = {
+                        'c0_segments': list(emp0 - overlap),
+                        'c1_segments': list(emp1 - overlap),
+                        'overlap_segments': list(overlap),
+                        'c0_size': len(emp0),
+                        'c1_size': len(emp1),
+                        'overlap_size': len(overlap),
+                    }
+                    await websocket.send(json.dumps({'type': 'step_full', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'set_isv':
                 clock_id = data.get('clock', 0)
@@ -245,11 +254,18 @@ async def handle(websocket):
 async def main():
     init_game()
 
-    # Start HTTP server for static files in a thread
+    # Start HTTP server for static files in a thread (no-cache headers)
     import http.server, threading, os
     viz_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'viz')
-    handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(*args, directory=viz_dir, **kwargs)
-    httpd = http.server.HTTPServer(('localhost', 8766), handler)
+    class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=viz_dir, **kwargs)
+        def end_headers(self):
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            super().end_headers()
+    httpd = http.server.HTTPServer(('localhost', 8766), NoCacheHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     print(f"Static server: http://localhost:8766")
 

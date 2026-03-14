@@ -193,6 +193,11 @@ class HelixBuilder:
 
             z = np.cross(x, y)
             basis = np.column_stack([x, y, z])
+            det = np.linalg.det(basis)
+            if abs(det) < 1e-10:
+                # Degenerate basis — just negate z-component directly
+                mirrored.append(seg * np.array([1.0, 1.0, -1.0]))
+                continue
             mirror = basis @ np.diag([1.0, 1.0, -1.0]) @ np.linalg.inv(basis)
 
             mirrored.append(seg @ mirror.T)

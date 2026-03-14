@@ -13,6 +13,12 @@ Commands from front-end:
   {"cmd": "get_state"}                    → request current state
   {"cmd": "get_board"}                    → request full board data
 
+Helix mode commands:
+  {"cmd": "init_helix", "preset": "teeter_totter"}
+  {"cmd": "init_helix", "config": {"emperor1": {...}, "emperor2": {...}, "exponent": 28}}
+  {"cmd": "step"}                         → works for both modes
+  {"cmd": "get_state"}                    → works for both modes
+
 Run: python server.py
 """
 
@@ -22,6 +28,7 @@ import numpy as np
 import websockets
 from engine.game import Game
 from engine.cycle_clock import ISVParams
+from engine.helix_game import HelixGame, PRESETS
 
 
 class NpEncoder(json.JSONEncoder):
@@ -33,6 +40,8 @@ class NpEncoder(json.JSONEncoder):
 
 
 game = None
+helix_game = None
+mode = 'segment'  # 'segment' or 'helix'
 
 
 def init_game():
@@ -72,45 +81,111 @@ def get_board_data():
     }
 
 
+def init_helix_game(preset_name=None, config=None, empire_radius=5000):
+    """Initialize helix mode simulation."""
+    global helix_game, mode
+    mode = 'helix'
+
+    helix_game = HelixGame(empire_radius=empire_radius, verbose=True)
+
+    if preset_name:
+        helix_game.init_from_preset(preset_name)
+        print(f"Helix mode: preset '{preset_name}'")
+    elif config:
+        for key in ['emperor1', 'emperor2']:
+            if key in config:
+                cfg = config[key]
+                pos = cfg.get('position', [0, 0, 0])
+                if isinstance(pos, str) and pos.startswith('empire['):
+                    idx = int(pos.split('[')[1].rstrip(']'))
+                    pos = helix_game.empire[min(idx, len(helix_game.empire) - 1)]
+                helix_game.add_emperor(
+                    position=pos,
+                    axis_group=cfg.get('axis_group', 3),
+                    chirality=cfg.get('chirality', 'L'),
+                    exponent=config.get('exponent', 28),
+                )
+        print(f"Helix mode: custom config")
+
+
 async def handle(websocket):
+    global mode
     print(f"Client connected")
     try:
         async for message in websocket:
             data = json.loads(message)
             cmd = data.get('cmd')
 
-            if cmd == 'get_board':
-                board = get_board_data()
-                await websocket.send(json.dumps({'type': 'board', 'data': board}, cls=NpEncoder))
+            if cmd == 'init_helix':
+                preset = data.get('preset')
+                config = data.get('config')
+                empire_radius = data.get('empire_radius', 5000)
+                init_helix_game(preset_name=preset, config=config,
+                              empire_radius=empire_radius)
+                state = helix_game.get_state()
+                await websocket.send(json.dumps({
+                    'type': 'helix_init',
+                    'data': state,
+                    'presets': list(PRESETS.keys()),
+                }, cls=NpEncoder))
+
+            elif cmd == 'get_board':
+                if mode == 'helix' and helix_game:
+                    # Helix mode: send empire points + emperor info
+                    await websocket.send(json.dumps({
+                        'type': 'board',
+                        'data': {
+                            'mode': 'helix',
+                            'empire_size': len(helix_game.empire),
+                            'empire_positions': helix_game.empire[:500].tolist(),
+                            'emperors': [e.snapshot() for e in helix_game.emperors],
+                        }
+                    }, cls=NpEncoder))
+                else:
+                    board = get_board_data()
+                    await websocket.send(json.dumps({'type': 'board', 'data': board}, cls=NpEncoder))
 
             elif cmd == 'get_state':
-                state = game.get_state()
+                if mode == 'helix' and helix_game:
+                    state = helix_game.get_state()
+                else:
+                    state = game.get_state()
                 await websocket.send(json.dumps({'type': 'state', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'step':
                 n = data.get('n', 1)
-                for _ in range(n):
-                    step_data = game.step()
-                # Send step with empire segment IDs for visualization
-                for cd in step_data['clocks']:
-                    cd.pop('all_options', None)
-                state = game.get_state()
-                state['step_data'] = step_data
-                # Add empire segments for both clocks
-                c0v = game.clocks[0].vertex
-                c1v = game.clocks[1].vertex
-                emp0 = game.empire.segment_empire[c0v]
-                emp1 = game.empire.segment_empire[c1v]
-                overlap = emp0 & emp1
-                state['empires'] = {
-                    'c0_segments': list(emp0 - overlap),       # C0 only
-                    'c1_segments': list(emp1 - overlap),       # C1 only
-                    'overlap_segments': list(overlap),          # shared
-                    'c0_size': len(emp0),
-                    'c1_size': len(emp1),
-                    'overlap_size': len(overlap),
-                }
-                await websocket.send(json.dumps({'type': 'step', 'data': state}, cls=NpEncoder))
+
+                if mode == 'helix' and helix_game:
+                    for _ in range(n):
+                        step_data = helix_game.step()
+                    state = helix_game.get_state()
+                    state['step_data'] = step_data
+                    await websocket.send(json.dumps({
+                        'type': 'step', 'data': state
+                    }, cls=NpEncoder))
+                else:
+                    for _ in range(n):
+                        step_data = game.step()
+                    # Send step with empire segment IDs for visualization
+                    for cd in step_data['clocks']:
+                        cd.pop('all_options', None)
+                    state = game.get_state()
+                    state['step_data'] = step_data
+                    # Add empire segments for both clocks
+                    c0v = game.clocks[0].vertex
+                    c1v = game.clocks[1].vertex
+                    emp0 = game.empire.segment_empire[c0v]
+                    emp1 = game.empire.segment_empire[c1v]
+                    overlap = emp0 & emp1
+                    state['empires'] = {
+                        'c0_segments': list(emp0 - overlap),
+                        'c1_segments': list(emp1 - overlap),
+                        'overlap_segments': list(overlap),
+                        'c0_size': len(emp0),
+                        'c1_size': len(emp1),
+                        'overlap_size': len(overlap),
+                    }
+                    await websocket.send(json.dumps({'type': 'step', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'step_with_options':
                 step_data = game.step()
@@ -134,7 +209,16 @@ async def handle(websocket):
             elif cmd == 'set_isv':
                 clock_id = data.get('clock', 0)
                 params = data.get('params', {})
-                game.update_isv(clock_id, params)
+                if mode == 'helix' and helix_game:
+                    # Update emperor exponent in helix mode
+                    if clock_id < len(helix_game.emperors):
+                        emp = helix_game.emperors[clock_id]
+                        if 'savings_exponent' in params:
+                            emp.exponent = params['savings_exponent']
+                        if 'chirality' in params:
+                            emp.chirality = params['chirality']
+                else:
+                    game.update_isv(clock_id, params)
                 await websocket.send(json.dumps({
                     'type': 'isv_updated',
                     'clock': clock_id,
@@ -142,6 +226,9 @@ async def handle(websocket):
                 }))
 
             elif cmd == 'reset':
+                if mode == 'helix':
+                    mode = 'segment'
+                    helix_game = None
                 init_game()
                 board = get_board_data()
                 state = game.get_state()

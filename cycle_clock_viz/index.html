@@ -120,7 +120,7 @@ async function init() {
       fetch('../fig_gameboard.json?v=4'),
       fetch('../game_history.json?v=3'),
       fetch('../icosidodecahedron.json?v=6'),
-      fetch('../clock_geometry.json?v=4')
+      fetch('../clock_geometry.json?v=5')
     ]);
     boardData = await boardResp.json();
     historyData = await histResp.json();
@@ -470,18 +470,7 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   const icoPoly = group.userData.icoGroup;
   const fullCycle = coxeterPhase === 0 && step > 0;
 
-  // Update exploded hexagon color by current A2 fiber
-  const clockIdx = group === clock1Mesh ? 0 : 1;
-  if (explodedHexes[clockIdx]) {
-    const a2f = group.userData.a2Fiber || 0;
-    explodedHexes[clockIdx].traverse(child => {
-      if (child.material && !child.name) {
-        child.material.color.setHex(A2_COLORS_U[a2f]);
-      }
-    });
-    const hface = explodedHexes[clockIdx].getObjectByName('hexFace');
-    if (hface) hface.material.color.setHex(A2_COLORS_U[a2f]);
-  }
+  // (Exploded views now updated dynamically by updateExplodedCubo/Hex)
   // (Dead cell24/hexFiber code removed — Fix: Klee review #3)
 
   // === THREE-LEVEL VERTEX HIGHLIGHTING on the icosidodecahedron ===
@@ -611,6 +600,12 @@ function updateStep(step) {
   // Per-clock orbit seed for correct highlight data (Fix: Klee review #1)
   clock1Mesh.userData.orbitSeed = c0.orbit_seed || 0;
   clock2Mesh.userData.orbitSeed = c1.orbit_seed || 0;
+
+  // Update root-derived exploded views when fiber/A2 changes (Fix: Klee #5)
+  updateExplodedCubo(0, c0.fiber);
+  updateExplodedCubo(1, c1.fiber);
+  updateExplodedHex(0, c0.fiber, c0.a2_fiber || 0);
+  updateExplodedHex(1, c1.fiber, c1.a2_fiber || 0);
   updateClockAppearance(clock1Mesh, chi0, c0.generation, c0.coxeter_phase, c0.empire_size, step);
   updateClockAppearance(clock2Mesh, chi1, c1.generation, c1.coxeter_phase, c1.empire_size, step);
 
@@ -795,81 +790,22 @@ function buildExplodedViews() {
   const colors = [CHI_PLUS, CHI_MINUS];
 
   for (let ci = 0; ci < 2; ci++) {
-    // === CUBOCTAHEDRON: clean 3D shape ===
+    // === CUBOCTAHEDRON: root-derived from conformal selection (Fix: Klee #5) ===
+    // Uses actual D4 fiber geometry, not generic coordinates.
+    // Updated dynamically when the clock changes fiber.
     const cuboGroup = new THREE.Group();
     cuboGroup.position.copy(cuboPositions[ci]);
-    const cuboS = 0.65;
-    const cverts = [];
-    for (let i = 0; i < 3; i++) {
-      for (const s1 of [-1, 1]) {
-        for (const s2 of [-1, 1]) {
-          const v = [0, 0, 0];
-          v[(i+1)%3] = s1 * cuboS; v[(i+2)%3] = s2 * cuboS;
-          cverts.push(new THREE.Vector3(...v));
-        }
-      }
-    }
-    // Edges
-    const ced = Math.sqrt(2) * cuboS;
-    const cepos = [];
-    for (let a = 0; a < 12; a++) {
-      for (let b = a+1; b < 12; b++) {
-        if (Math.abs(cverts[a].distanceTo(cverts[b]) - ced) < 0.01) {
-          cepos.push(cverts[a].x,cverts[a].y,cverts[a].z, cverts[b].x,cverts[b].y,cverts[b].z);
-        }
-      }
-    }
-    const cegeo = new THREE.BufferGeometry();
-    cegeo.setAttribute('position', new THREE.Float32BufferAttribute(cepos, 3));
-    cuboGroup.add(new THREE.LineSegments(cegeo,
-      new THREE.LineBasicMaterial({ color: 0x44ddee, transparent: true, opacity: 0.6 })));
-    // Vertex dots
-    const cdg = new THREE.SphereGeometry(0.05, 8, 8);
-    cverts.forEach((v, i) => {
-      const d = new THREE.Mesh(cdg, new THREE.MeshBasicMaterial({ color: 0x44ddee }));
-      d.position.copy(v);
-      d.name = `cuboV_${i}`;
-      cuboGroup.add(d);
-    });
+    cuboGroup.name = `cubo_${ci}`;
+    // Will be populated by updateExplodedCubo() based on current fiber
     scene.add(cuboGroup);
     explodedCubos.push(cuboGroup);
 
-    // === HEXAGON: clean flat shape ===
+    // === HEXAGON: root-derived from A2 sub-fiber (Fix: Klee #5) ===
+    // Uses actual A2 vertex positions from the conformal cuboctahedron.
+    // Updated dynamically when the clock changes fiber/A2.
     const hexGroup = new THREE.Group();
     hexGroup.position.copy(hexPositions[ci]);
-    const hs = 0.45;
-    // Filled face
-    const hexShape = new THREE.Shape();
-    for (let k = 0; k <= 6; k++) {
-      const a = (k/6)*Math.PI*2;
-      if (k===0) hexShape.moveTo(Math.cos(a)*hs, Math.sin(a)*hs);
-      else hexShape.lineTo(Math.cos(a)*hs, Math.sin(a)*hs);
-    }
-    const hfm = new THREE.MeshBasicMaterial({
-      color: A2C[0], transparent: true, opacity: 0.15,
-      side: THREE.DoubleSide, depthWrite: false
-    });
-    const hface = new THREE.Mesh(new THREE.ShapeGeometry(hexShape), hfm);
-    hface.name = 'hexFace';
-    hexGroup.add(hface);
-    // Outline
-    const hopos = [];
-    for (let k = 0; k < 6; k++) {
-      const a1=(k/6)*Math.PI*2, a2=((k+1)/6)*Math.PI*2;
-      hopos.push(Math.cos(a1)*hs,Math.sin(a1)*hs,0, Math.cos(a2)*hs,Math.sin(a2)*hs,0);
-    }
-    const hogeo = new THREE.BufferGeometry();
-    hogeo.setAttribute('position', new THREE.Float32BufferAttribute(hopos, 3));
-    hexGroup.add(new THREE.LineSegments(hogeo,
-      new THREE.LineBasicMaterial({ color: A2C[0], transparent: true, opacity: 0.9 })));
-    // Dots
-    const hdg = new THREE.SphereGeometry(0.05, 8, 8);
-    for (let k = 0; k < 6; k++) {
-      const a = (k/6)*Math.PI*2;
-      const d = new THREE.Mesh(hdg, new THREE.MeshBasicMaterial({ color: A2C[0] }));
-      d.position.set(Math.cos(a)*hs, Math.sin(a)*hs, 0);
-      hexGroup.add(d);
-    }
+    hexGroup.name = `hex_${ci}`;
     scene.add(hexGroup);
     explodedHexes.push(hexGroup);
 
@@ -893,6 +829,101 @@ function buildExplodedViews() {
     scene.add(hcLine);
     hexConnectors.push(hcLine);
   }
+}
+
+// Track last fiber to avoid rebuilding when unchanged
+let lastFiber = [-1, -1];
+let lastA2 = [-1, -1];
+
+function updateExplodedCubo(clockIdx, fiberIdx) {
+  if (!clockGeom || !clockGeom.fiber_cuboctahedra) return;
+  if (lastFiber[clockIdx] === fiberIdx) return;  // no change
+  lastFiber[clockIdx] = fiberIdx;
+
+  const cuboData = clockGeom.fiber_cuboctahedra[String(fiberIdx)];
+  if (!cuboData) return;
+
+  const group = explodedCubos[clockIdx];
+  // Clear old children
+  while (group.children.length) {
+    const c = group.children[0];
+    group.remove(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  }
+
+  const scale = 0.65;
+  const A2C = [0xff4444, 0x44ff44, 0xff44ff, 0xffff44];
+
+  // Edges
+  const epos = [];
+  cuboData.edges.forEach(([a, b]) => {
+    const va = cuboData.vertices_3d[a], vb = cuboData.vertices_3d[b];
+    epos.push(va[0]*scale,va[1]*scale,va[2]*scale, vb[0]*scale,vb[1]*scale,vb[2]*scale);
+  });
+  const egeo = new THREE.BufferGeometry();
+  egeo.setAttribute('position', new THREE.Float32BufferAttribute(epos, 3));
+  group.add(new THREE.LineSegments(egeo,
+    new THREE.LineBasicMaterial({ color: 0x44ddee, transparent: true, opacity: 0.6 })));
+
+  // Vertices colored by A2 fiber
+  const dg = new THREE.SphereGeometry(0.04, 8, 8);
+  cuboData.vertices_3d.forEach((v, i) => {
+    const a2f = cuboData.a2_colors[i];
+    const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ color: A2C[a2f] }));
+    d.position.set(v[0]*scale, v[1]*scale, v[2]*scale);
+    group.add(d);
+  });
+}
+
+function updateExplodedHex(clockIdx, fiberIdx, a2Fiber) {
+  if (!clockGeom || !clockGeom.fiber_cuboctahedra || !clockGeom.fiber_hexagons) return;
+  if (lastFiber[clockIdx] === fiberIdx && lastA2[clockIdx] === a2Fiber) return;
+  lastA2[clockIdx] = a2Fiber;
+
+  const group = explodedHexes[clockIdx];
+  while (group.children.length) {
+    const c = group.children[0];
+    group.remove(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  }
+
+  const cuboData = clockGeom.fiber_cuboctahedra[String(fiberIdx)];
+  const hexData = clockGeom.fiber_hexagons[String(fiberIdx)];
+  if (!cuboData || !hexData) return;
+
+  const a2Data = hexData[String(a2Fiber)];
+  if (!a2Data) return;
+
+  const A2C = [0xff4444, 0x44ff44, 0xff44ff, 0xffff44];
+  const color = A2C[a2Fiber];
+  const scale = 0.65;
+
+  // Get the A2 vertices from the cuboctahedron
+  const members = a2Data.cubo_vertex_indices;
+  const pts = members.map(i => cuboData.vertices_3d[i]);
+
+  // Outline
+  if (pts.length >= 3) {
+    const opos = [];
+    for (let k = 0; k < pts.length; k++) {
+      const p0 = pts[k], p1 = pts[(k+1) % pts.length];
+      opos.push(p0[0]*scale,p0[1]*scale,p0[2]*scale, p1[0]*scale,p1[1]*scale,p1[2]*scale);
+    }
+    const ogeo = new THREE.BufferGeometry();
+    ogeo.setAttribute('position', new THREE.Float32BufferAttribute(opos, 3));
+    group.add(new THREE.LineSegments(ogeo,
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })));
+  }
+
+  // Vertex dots
+  const dg = new THREE.SphereGeometry(0.05, 8, 8);
+  pts.forEach(p => {
+    const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ color }));
+    d.position.set(p[0]*scale, p[1]*scale, p[2]*scale);
+    group.add(d);
+  });
 }
 
 function buildStartMarkers() {

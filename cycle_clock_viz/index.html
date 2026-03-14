@@ -97,7 +97,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // === GLOBALS ===
 let scene, camera, renderer, controls;
-let boardData, historyData, icosiData;
+let boardData, historyData, icosiData, clockGeom;
 let vertexMeshes = [], edgeMeshes = [];
 let clock1Mesh, clock2Mesh;
 let clock1Trail = [], clock2Trail = [];
@@ -121,15 +121,17 @@ const GEN_COLORS = [0xe74c3c, 0x2ecc71, 0x3498db];
 async function init() {
   // Load data
   try {
-    const [boardResp, histResp, icosiResp] = await Promise.all([
+    const [boardResp, histResp, icosiResp, geomResp] = await Promise.all([
       fetch('../fig_gameboard.json'),
       fetch('../game_history.json'),
-      fetch('../icosidodecahedron.json?v=4')
+      fetch('../icosidodecahedron.json?v=5'),
+      fetch('../clock_geometry.json?v=1')
     ]);
     boardData = await boardResp.json();
     historyData = await histResp.json();
     icosiData = await icosiResp.json();
-    console.log('Data loaded:', boardData.n_vertices, 'verts,', icosiData.vertices.length, 'icosi verts');
+    clockGeom = await geomResp.json();
+    console.log('Data loaded:', boardData.n_vertices, 'verts,', icosiData.vertices.length, 'icosi verts,', clockGeom.cell24_vertices.length, '24-cell verts');
   } catch(e) {
     console.error('FETCH ERROR:', e);
     return;
@@ -347,6 +349,63 @@ function buildClockGroup(color) {
   flash.name = 'closureFlash';
   group.add(flash);
 
+  // === HEXAGONAL RING: the A2 fiber (6-fold structure) ===
+  const hexGroup = new THREE.Group();
+  hexGroup.name = 'hexRing';
+  const hexRadius = 0.35;
+  const hexGeo = new THREE.BufferGeometry();
+  const hexPos = [];
+  const A2_COLORS = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
+  for (let k = 0; k <= 6; k++) {
+    const angle = (k / 6) * Math.PI * 2;
+    hexPos.push(Math.cos(angle) * hexRadius, 0, Math.sin(angle) * hexRadius);
+  }
+  hexGeo.setAttribute('position', new THREE.Float32BufferAttribute(hexPos, 3));
+  const hexMat = new THREE.LineBasicMaterial({ color: A2_COLORS[0], transparent: true, opacity: 0.8 });
+  const hexLine = new THREE.Line(hexGeo, hexMat);
+  hexLine.name = 'hexLine';
+  hexGroup.add(hexLine);
+  // 6 vertex dots on the hexagon
+  const hexDotGeo = new THREE.SphereGeometry(0.025, 6, 6);
+  for (let k = 0; k < 6; k++) {
+    const angle = (k / 6) * Math.PI * 2;
+    const dot = new THREE.Mesh(hexDotGeo, new THREE.MeshBasicMaterial({ color: A2_COLORS[0] }));
+    dot.position.set(Math.cos(angle) * hexRadius, 0, Math.sin(angle) * hexRadius);
+    dot.name = `hexDot_${k}`;
+    hexGroup.add(dot);
+  }
+  hexGroup.position.set(0, -0.3, 0);  // below the orb
+  group.add(hexGroup);
+
+  // === 24-CELL SILHOUETTE: the D4 shell ===
+  const cell24Group = new THREE.Group();
+  cell24Group.name = 'cell24';
+  if (clockGeom && clockGeom.cell24_vertices) {
+    const c24Scale = 0.9;
+    const c24Pos = [];
+    clockGeom.cell24_edges.forEach(([a, b]) => {
+      const va = clockGeom.cell24_vertices[a];
+      const vb = clockGeom.cell24_vertices[b];
+      c24Pos.push(va[0]*c24Scale, va[1]*c24Scale, va[2]*c24Scale);
+      c24Pos.push(vb[0]*c24Scale, vb[1]*c24Scale, vb[2]*c24Scale);
+    });
+    const c24Geo = new THREE.BufferGeometry();
+    c24Geo.setAttribute('position', new THREE.Float32BufferAttribute(c24Pos, 3));
+    const c24Mat = new THREE.LineBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.6 });
+    cell24Group.add(new THREE.LineSegments(c24Geo, c24Mat));
+    // Color vertices by A2 fiber
+    const c24DotGeo = new THREE.SphereGeometry(0.04, 8, 8);
+    clockGeom.cell24_vertices.forEach((v, i) => {
+      const a2f = (clockGeom.cell24_a2_fibers || [])[i] || 0;
+      const dot = new THREE.Mesh(c24DotGeo,
+        new THREE.MeshBasicMaterial({ color: A2_COLORS[a2f], transparent: true, opacity: 0.8 }));
+      dot.position.set(v[0]*c24Scale, v[1]*c24Scale, v[2]*c24Scale);
+      cell24Group.add(dot);
+    });
+  }
+  cell24Group.position.set(0, 0, 0);  // centered on the orb
+  group.add(cell24Group);
+
   // Point light for local illumination
   const light = new THREE.PointLight(color, 1.5, 3);
   light.name = 'light';
@@ -396,9 +455,24 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   // Generation ring color
   if (ring) ring.material.color.setHex(GEN_COLORS[genIdx]);
 
-  // Empire-based sizing
+  // Empire-based glow radius: larger empire = bigger halo
   const empScale = 0.6 + (empireSize / 287) * 0.8;
   if (core) { core.userData = core.userData || {}; core.userData.empScale = empScale; }
+  if (halo) halo.scale.setScalar(empScale * 1.5);
+  if (outer) outer.scale.setScalar(empScale * 2.0);
+
+  // Hexagonal ring: color by A2 fiber
+  const A2_COLORS = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
+  const hexRing = group.getObjectByName('hexRing');
+  if (hexRing) {
+    const a2Fiber = group.userData.a2Fiber || 0;
+    const hexLine = hexRing.getObjectByName('hexLine');
+    if (hexLine) hexLine.material.color.setHex(A2_COLORS[a2Fiber]);
+    for (let k = 0; k < 6; k++) {
+      const dot = hexRing.getObjectByName(`hexDot_${k}`);
+      if (dot) dot.material.color.setHex(A2_COLORS[a2Fiber]);
+    }
+  }
 
   // Update solid body color
   const icoPoly = group.getObjectByName('coxeterPoly');
@@ -470,9 +544,11 @@ function updateStep(step) {
   targetPos0.set(...c0.pos_3d);
   targetPos1.set(...c1.pos_3d);
 
-  // Update colors, phase dots, empire sizing
+  // Update colors, phase dots, empire sizing, A2 fiber
   const chi0 = c0.chirality > 0 ? CHI_PLUS : CHI_MINUS;
   const chi1 = c1.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+  clock1Mesh.userData.a2Fiber = c0.a2_fiber || 0;
+  clock2Mesh.userData.a2Fiber = c1.a2_fiber || 0;
   updateClockAppearance(clock1Mesh, chi0, c0.generation, c0.coxeter_phase, c0.empire_size, step);
   updateClockAppearance(clock2Mesh, chi1, c1.generation, c1.coxeter_phase, c1.empire_size, step);
 
@@ -728,6 +804,18 @@ function animate() {
     const ico2 = clock2Mesh.getObjectByName('coxeterPoly');
     if (ico1) { ico1.rotation.y += 0.003; ico1.rotation.x += 0.001; }
     if (ico2) { ico2.rotation.y -= 0.003; ico2.rotation.x += 0.001; }
+
+    // Rotate hex rings (A2 fiber indicator)
+    const hex1 = clock1Mesh.getObjectByName('hexRing');
+    const hex2 = clock2Mesh.getObjectByName('hexRing');
+    if (hex1) hex1.rotation.y += 0.01;
+    if (hex2) hex2.rotation.y -= 0.01;
+
+    // Slowly rotate 24-cells
+    const c24_1 = clock1Mesh.getObjectByName('cell24');
+    const c24_2 = clock2Mesh.getObjectByName('cell24');
+    if (c24_1) { c24_1.rotation.y += 0.005; c24_1.rotation.z += 0.002; }
+    if (c24_2) { c24_2.rotation.y -= 0.005; c24_2.rotation.z += 0.002; }
   }
 
   renderer.render(scene, camera);

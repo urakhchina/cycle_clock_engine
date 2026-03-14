@@ -252,7 +252,7 @@ function onBoard(data) {
   const segGeo = new THREE.BufferGeometry();
   segGeo.setAttribute('position', new THREE.Float32BufferAttribute(segPos, 3));
   segGeo.setAttribute('color', new THREE.Float32BufferAttribute(segColorArray, 3));
-  const segMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+  const segMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 1.0 });
   segmentLines = new THREE.LineSegments(segGeo, segMat);
   scene.add(segmentLines);
 
@@ -263,43 +263,127 @@ function onBoard(data) {
 }
 
 // === EMPIRE FIELD VISUALIZATION ===
-function updateEmpireField(empires) {
-  if (!segColorArray || !segmentLines || !empires) return;
-  const nSegs = segColorArray.length / 6;
+// Target colors for smooth blending, plus previous state for change detection
+let segTargetColors = null;
+let segPrevEmpireState = null;  // 0=none, 1=c0, 2=c1, 3=overlap per segment
+let segFlashTimer = null;       // per-segment flash countdown
 
-  // Reset all segments to dim
-  for (let i = 0; i < nSegs; i++) {
-    segColorArray[i*6+0] = 0.04; segColorArray[i*6+1] = 0.04; segColorArray[i*6+2] = 0.06;
-    segColorArray[i*6+3] = 0.04; segColorArray[i*6+4] = 0.04; segColorArray[i*6+5] = 0.06;
+function updateEmpireField(empires) {
+  if (!segColorArray || !segmentLines || !empires || !boardData) return;
+  const nSegs = segColorArray.length / 6;
+  const positions = boardData.positions_3d;
+  const segments = boardData.segments;
+
+  if (!segTargetColors) segTargetColors = new Float32Array(nSegs * 6);
+  if (!segPrevEmpireState) segPrevEmpireState = new Uint8Array(nSegs);
+  if (!segFlashTimer) segFlashTimer = new Float32Array(nSegs);
+
+  // Build current state map
+  const curState = new Uint8Array(nSegs);  // 0=none, 1=c0, 2=c1, 3=overlap
+  const c0set = new Set(empires.c0_segments || []);
+  const c1set = new Set(empires.c1_segments || []);
+  const overset = new Set(empires.overlap_segments || []);
+
+  // Get clock positions for distance-based brightness
+  const c0pos = clock0Mesh ? clock0Mesh.position : new THREE.Vector3();
+  const c1pos = clock1Mesh ? clock1Mesh.position : new THREE.Vector3();
+
+  const c0col = new THREE.Color(CHI_PLUS);
+  const c1col = new THREE.Color(CHI_MINUS);
+
+  for (let si = 0; si < nSegs; si++) {
+    // Determine state
+    if (overset.has(si)) curState[si] = 3;
+    else if (c0set.has(si)) curState[si] = 1;
+    else if (c1set.has(si)) curState[si] = 2;
+    else curState[si] = 0;
+
+    // Detect change: flash segments that changed state
+    if (segPrevEmpireState[si] !== curState[si]) {
+      segFlashTimer[si] = 1.0;  // start flash
+    }
+
+    // Distance-based brightness
+    const [a, b] = segments[si];
+    const pa = positions[a], pb = positions[b];
+    const mx = (pa[0]+pb[0])/2*FIG_SCALE, my = (pa[1]+pb[1])/2*FIG_SCALE, mz = (pa[2]+pb[2])/2*FIG_SCALE;
+
+    let brightness = 0.0;
+    let r = 0, g = 0, bl = 0;
+
+    if (curState[si] === 3) {
+      // Overlap: bright white, distance from midpoint of both clocks
+      const cd = Math.min(
+        Math.sqrt((mx-c0pos.x)**2+(my-c0pos.y)**2+(mz-c0pos.z)**2),
+        Math.sqrt((mx-c1pos.x)**2+(my-c1pos.y)**2+(mz-c1pos.z)**2));
+      brightness = Math.max(0.3, 1.0 - cd * 0.08);
+      r = brightness * 0.9; g = brightness * 0.9; bl = brightness;
+    } else if (curState[si] === 1) {
+      // C0 empire: gold, brighter near C0
+      const cd = Math.sqrt((mx-c0pos.x)**2+(my-c0pos.y)**2+(mz-c0pos.z)**2);
+      brightness = Math.max(0.1, 0.7 - cd * 0.06);
+      r = c0col.r * brightness; g = c0col.g * brightness; bl = c0col.b * brightness * 0.5;
+    } else if (curState[si] === 2) {
+      // C1 empire: purple, brighter near C1
+      const cd = Math.sqrt((mx-c1pos.x)**2+(my-c1pos.y)**2+(mz-c1pos.z)**2);
+      brightness = Math.max(0.1, 0.7 - cd * 0.06);
+      r = c1col.r * brightness; g = c1col.g * brightness * 0.5; bl = c1col.b * brightness;
+    } else {
+      // Not in empire: very dim
+      r = 0.02; g = 0.02; bl = 0.03;
+    }
+
+    // Flash: gained segments flash green, lost segments flash red
+    if (segFlashTimer[si] > 0) {
+      const f = segFlashTimer[si];
+      if (curState[si] > 0 && segPrevEmpireState[si] === 0) {
+        // GAINED — flash green
+        r += f * 0.3; g += f * 0.8; bl += f * 0.2;
+      } else if (curState[si] === 0 && segPrevEmpireState[si] > 0) {
+        // LOST — flash red
+        r += f * 0.8; g += f * 0.1; bl += f * 0.1;
+      } else {
+        // Changed territory (c0↔c1↔overlap) — flash white
+        r += f * 0.4; g += f * 0.4; bl += f * 0.4;
+      }
+    }
+
+    segTargetColors[si*6+0] = r; segTargetColors[si*6+1] = g; segTargetColors[si*6+2] = bl;
+    segTargetColors[si*6+3] = r; segTargetColors[si*6+4] = g; segTargetColors[si*6+5] = bl;
   }
 
-  // C0 empire — gold
-  const c0col = new THREE.Color(CHI_PLUS);
-  (empires.c0_segments || []).forEach(si => {
-    if (si < nSegs) {
-      segColorArray[si*6+0] = c0col.r * 0.5; segColorArray[si*6+1] = c0col.g * 0.5; segColorArray[si*6+2] = c0col.b * 0.3;
-      segColorArray[si*6+3] = c0col.r * 0.5; segColorArray[si*6+4] = c0col.g * 0.5; segColorArray[si*6+5] = c0col.b * 0.3;
-    }
-  });
+  // Save current state for next frame's change detection
+  segPrevEmpireState.set(curState);
+}
 
-  // C1 empire — purple
-  const c1col = new THREE.Color(CHI_MINUS);
-  (empires.c1_segments || []).forEach(si => {
-    if (si < nSegs) {
-      segColorArray[si*6+0] = c1col.r * 0.5; segColorArray[si*6+1] = c1col.g * 0.3; segColorArray[si*6+2] = c1col.b * 0.5;
-      segColorArray[si*6+3] = c1col.r * 0.5; segColorArray[si*6+4] = c1col.g * 0.3; segColorArray[si*6+5] = c1col.b * 0.5;
-    }
-  });
+function blendSegmentColors() {
+  // Called every animation frame — smoothly blend toward target colors
+  if (!segColorArray || !segTargetColors || !segmentLines) return;
+  const n = segColorArray.length;
+  const speed = 0.12;  // blend rate
+  let changed = false;
 
-  // Overlap — bright white
-  (empires.overlap_segments || []).forEach(si => {
-    if (si < nSegs) {
-      segColorArray[si*6+0] = 0.8; segColorArray[si*6+1] = 0.8; segColorArray[si*6+2] = 0.9;
-      segColorArray[si*6+3] = 0.8; segColorArray[si*6+4] = 0.8; segColorArray[si*6+5] = 0.9;
+  for (let i = 0; i < n; i++) {
+    const diff = segTargetColors[i] - segColorArray[i];
+    if (Math.abs(diff) > 0.001) {
+      segColorArray[i] += diff * speed;
+      changed = true;
     }
-  });
+  }
 
-  segmentLines.geometry.attributes.color.needsUpdate = true;
+  // Decay flash timers
+  if (segFlashTimer) {
+    for (let i = 0; i < segFlashTimer.length; i++) {
+      if (segFlashTimer[i] > 0) {
+        segFlashTimer[i] -= 0.03;
+        if (segFlashTimer[i] < 0) segFlashTimer[i] = 0;
+      }
+    }
+  }
+
+  if (changed) {
+    segmentLines.geometry.attributes.color.needsUpdate = true;
+  }
 }
 
 // === UPDATE FROM STEP ===
@@ -411,7 +495,10 @@ function animate() {
     }
   }
 
-  // Gentle pulse
+  // Smooth empire color blending every frame
+  blendSegmentColors();
+
+  // Gentle pulse on clocks
   [clock0Mesh, clock1Mesh].forEach(m => {
     const p = 1 + 0.08 * Math.sin(animFrame * 0.04);
     m.scale.setScalar(p);

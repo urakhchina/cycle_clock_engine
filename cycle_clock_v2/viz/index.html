@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cycle Clock v2 — Live Simulation</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
+
+#main-canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 140px); }
+
+/* Bottom bar */
+#bottom-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 140px;
+  display: flex; gap: 10px; padding: 10px 16px;
+  background: rgba(5,5,15,0.95);
+  border-top: 1px solid rgba(100,150,255,0.25);
+  align-items: flex-start; z-index: 10;
+}
+.panel {
+  background: rgba(15,15,35,0.9); padding: 10px 14px; border-radius: 6px;
+  border: 1px solid rgba(100,150,255,0.2); font-size: 12px; line-height: 1.5;
+  height: 100%; overflow-y: auto;
+}
+
+/* Controls panel */
+#controls { min-width: 200px; }
+#controls button {
+  background: rgba(100,150,255,0.3); color: #fff; border: 1px solid rgba(100,150,255,0.5);
+  padding: 6px 14px; margin: 2px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px;
+}
+#controls button:hover { background: rgba(100,150,255,0.5); }
+#controls button.active { background: rgba(100,200,100,0.5); border-color: rgba(100,200,100,0.7); }
+.slider-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.slider-row label { color: #888; font-size: 11px; min-width: 80px; }
+.slider-row input[type=range] { width: 80px; }
+.slider-row .val { color: #fff; font-size: 11px; min-width: 30px; }
+
+/* HUD */
+#hud { min-width: 260px; }
+.chi-plus { color: #f0a030; }
+.chi-minus { color: #a060f0; }
+
+/* Probability histogram */
+#prob-panel { min-width: 220px; }
+#prob-canvas { width: 200px; height: 100px; background: rgba(0,0,0,0.3); border-radius: 4px; }
+
+/* Metrics */
+#metrics { min-width: 180px; }
+.metric-row { display: flex; justify-content: space-between; margin: 2px 0; }
+.metric-label { color: #888; }
+.metric-val { color: #fff; font-weight: bold; }
+.bar-track { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; margin: 2px 0; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+/* Connection status */
+#status { position: absolute; top: 10px; right: 10px; font-size: 11px; z-index: 20; }
+.connected { color: #2ecc71; }
+.disconnected { color: #e74c3c; }
+</style>
+</head>
+<body>
+
+<div id="status" class="disconnected">● Disconnected</div>
+
+<div id="bottom-bar">
+  <div class="panel" id="controls">
+    <button id="btn-play" onclick="togglePlay()">PLAY</button>
+    <button onclick="stepOnce()">STEP</button>
+    <button onclick="resetSim()">RESET</button>
+    <button onclick="zoomIn()">+</button>
+    <button onclick="zoomOut()">−</button>
+    <div class="slider-row">
+      <label>Speed</label>
+      <input type="range" id="speed" min="1" max="20" value="5">
+    </div>
+    <div class="slider-row">
+      <label>PEL exp</label>
+      <input type="range" id="pel" min="1" max="40" value="28" oninput="updateISV()">
+      <span class="val" id="pel-val">28</span>
+    </div>
+    <div class="slider-row">
+      <label>Coupling</label>
+      <input type="range" id="coupling" min="0" max="20" value="10" oninput="updateISV()">
+      <span class="val" id="coupling-val">1.0</span>
+    </div>
+  </div>
+
+  <div class="panel" id="hud">
+    <div id="clock0-info">Clock 0: connecting...</div>
+    <div id="clock1-info">Clock 1: connecting...</div>
+    <hr style="border-color: rgba(100,150,255,0.15); margin: 4px 0;">
+    <div id="step-info">Step 0</div>
+  </div>
+
+  <div class="panel" id="prob-panel">
+    <div style="color:#888;font-size:11px;margin-bottom:4px;">Savings Distribution (C0)</div>
+    <canvas id="prob-canvas"></canvas>
+  </div>
+
+  <div class="panel" id="metrics">
+    <div class="metric-row"><span class="metric-label">Seg Overlap</span><span class="metric-val" id="m-overlap">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="bar-overlap" style="width:0%;background:#88bbff;"></div></div>
+    <div class="metric-row"><span class="metric-label">Distance</span><span class="metric-val" id="m-dist">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="bar-dist" style="width:0%;background:#f0a030;"></div></div>
+    <div class="metric-row"><span class="metric-label">C0 Savings</span><span class="metric-val" id="m-sav0">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="bar-sav0" style="width:0%;background:#2ecc71;"></div></div>
+    <div class="metric-row"><span class="metric-label">C0 Efficiency</span><span class="metric-val" id="m-eff">0%</span></div>
+    <div class="bar-track"><div class="bar-fill" id="bar-eff" style="width:0%;background:#e74c3c;"></div></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// === GLOBALS ===
+let scene, camera, renderer, controls;
+let ws;
+let boardData = null;
+let vertexMeshes = [], segmentLines = null;
+let clock0Mesh, clock1Mesh;
+let playing = false;
+let animFrame = 0;
+
+const CHI_PLUS = 0xf0a030;
+const CHI_MINUS = 0xa060f0;
+const FIG_SCALE = 1.0;
+
+// === WEBSOCKET ===
+function connectWS() {
+  ws = new WebSocket('ws://localhost:8765');
+  ws.onopen = () => {
+    document.getElementById('status').className = 'connected';
+    document.getElementById('status').textContent = '● Connected';
+    ws.send(JSON.stringify({cmd: 'get_board'}));
+  };
+  ws.onclose = () => {
+    document.getElementById('status').className = 'disconnected';
+    document.getElementById('status').textContent = '● Disconnected';
+    setTimeout(connectWS, 2000);
+  };
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'board') onBoard(msg.data);
+    else if (msg.type === 'step' || msg.type === 'step_full') onStep(msg.data);
+    else if (msg.type === 'state') onState(msg.data);
+    else if (msg.type === 'reset') { onBoard(msg.board); onState(msg.state); }
+  };
+}
+
+// === THREE.JS SETUP ===
+function initScene() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.02);
+
+  const container = document.getElementById('main-canvas');
+  const w = container.clientWidth, h = container.clientHeight;
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 200);
+  camera.position.set(0, 2, 12);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enableZoom = false;
+
+  scene.add(new THREE.AmbientLight(0x334466, 0.5));
+  const light = new THREE.PointLight(0x88bbff, 2, 30);
+  light.position.set(3, 5, 3);
+  scene.add(light);
+
+  // Clock orbs
+  const makeOrb = (color) => {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 24, 24),
+      new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.8, transparent: true, opacity: 0.95 }));
+    core.name = 'core';
+    g.add(core);
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 16, 16),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.15 }));
+    g.add(halo);
+    g.add(new THREE.PointLight(color, 1, 4));
+    return g;
+  };
+  clock0Mesh = makeOrb(CHI_PLUS);
+  clock1Mesh = makeOrb(CHI_MINUS);
+  scene.add(clock0Mesh);
+  scene.add(clock1Mesh);
+
+  window.addEventListener('resize', () => {
+    const c = document.getElementById('main-canvas');
+    camera.aspect = c.clientWidth / c.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(c.clientWidth, c.clientHeight);
+  });
+}
+
+// === BUILD BOARD FROM SERVER DATA ===
+function onBoard(data) {
+  boardData = data;
+
+  // Clear old
+  vertexMeshes.forEach(m => scene.remove(m));
+  vertexMeshes = [];
+  if (segmentLines) scene.remove(segmentLines);
+
+  const positions = data.positions_3d;
+  const empSizes = data.vertex_empire_sizes;
+  const maxEmp = Math.max(...empSizes);
+  const segEmpSizes = data.segment_empire_sizes;
+
+  // Vertices
+  const vGeo = new THREE.SphereGeometry(0.015, 6, 6);
+  positions.forEach((p, i) => {
+    const r = empSizes[i] / maxEmp;
+    const color = new THREE.Color().setHSL(0.58, 0.3, 0.15 + r * 0.35);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4 });
+    const m = new THREE.Mesh(vGeo, mat);
+    m.position.set(p[0] * FIG_SCALE, p[1] * FIG_SCALE, p[2] * FIG_SCALE);
+    m.userData = { idx: i, empSize: empSizes[i] };
+    scene.add(m);
+    vertexMeshes.push(m);
+  });
+
+  // Segments as lines
+  const segPos = [];
+  const segColors = [];
+  const maxSegEmp = Math.max(...segEmpSizes);
+  data.segments.forEach(([a, b], si) => {
+    const pa = positions[a], pb = positions[b];
+    segPos.push(pa[0]*FIG_SCALE, pa[1]*FIG_SCALE, pa[2]*FIG_SCALE);
+    segPos.push(pb[0]*FIG_SCALE, pb[1]*FIG_SCALE, pb[2]*FIG_SCALE);
+    const c = new THREE.Color().setHSL(0.58, 0.4, 0.12);
+    segColors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  });
+  const segGeo = new THREE.BufferGeometry();
+  segGeo.setAttribute('position', new THREE.Float32BufferAttribute(segPos, 3));
+  segGeo.setAttribute('color', new THREE.Float32BufferAttribute(segColors, 3));
+  const segMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2 });
+  segmentLines = new THREE.LineSegments(segGeo, segMat);
+  scene.add(segmentLines);
+
+  console.log(`Board loaded: ${data.n_vertices} verts, ${data.n_segments} segments`);
+
+  // Request initial state
+  ws.send(JSON.stringify({cmd: 'get_state'}));
+}
+
+// === UPDATE FROM STEP ===
+function onStep(data) {
+  onState(data);
+
+  // Update probability histogram
+  if (data.step_data) {
+    const cd0 = data.step_data.clocks[0];
+    if (cd0.all_options) {
+      drawHistogram(cd0.all_options);
+    }
+
+    // Update metrics
+    document.getElementById('m-sav0').textContent = cd0.savings;
+    document.getElementById('bar-sav0').style.width = (cd0.savings / 1500 * 100) + '%';
+
+    const eff = cd0.best_savings > 0 ? (cd0.savings / cd0.best_savings * 100).toFixed(0) : 0;
+    document.getElementById('m-eff').textContent = eff + '%';
+    document.getElementById('bar-eff').style.width = eff + '%';
+
+    if (data.step_data.interaction) {
+      const inter = data.step_data.interaction;
+      document.getElementById('m-overlap').textContent = inter.segment_overlap;
+      document.getElementById('bar-overlap').style.width = (inter.segment_overlap / 2000 * 100) + '%';
+      document.getElementById('m-dist').textContent = inter.distance_3d.toFixed(2);
+      document.getElementById('bar-dist').style.width = (inter.distance_3d / 10 * 100) + '%';
+    }
+  }
+}
+
+function onState(data) {
+  if (!boardData || !data.clocks) return;
+  const positions = boardData.positions_3d;
+
+  data.clocks.forEach((sn, ci) => {
+    const mesh = ci === 0 ? clock0Mesh : clock1Mesh;
+    const p = positions[sn.vertex];
+    mesh.position.set(p[0] * FIG_SCALE, p[1] * FIG_SCALE, p[2] * FIG_SCALE);
+
+    const chiColor = sn.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+    const core = mesh.getObjectByName('core');
+    if (core) {
+      core.material.color.setHex(chiColor);
+      core.material.emissive.setHex(chiColor);
+    }
+  });
+
+  // Update HUD
+  const chiStr = (c) => c.chirality > 0 ? '<span class="chi-plus">+</span>' : '<span class="chi-minus">−</span>';
+  const c0 = data.clocks[0], c1 = data.clocks[1];
+  document.getElementById('clock0-info').innerHTML =
+    `<span class="chi-plus">■</span> C0 v${c0.vertex} χ=${chiStr(c0)} L${c0.generation} φ=${c0.coxeter_phase}`;
+  document.getElementById('clock1-info').innerHTML =
+    `<span class="chi-minus">■</span> C1 v${c1.vertex} χ=${chiStr(c1)} L${c1.generation} φ=${c1.coxeter_phase}`;
+  document.getElementById('step-info').textContent =
+    `Step ${data.step} | h=30=2×3×5 | ${boardData.n_segments} segments`;
+  document.getElementById('pel-val').textContent = document.getElementById('pel').value;
+  document.getElementById('coupling-val').textContent = (document.getElementById('coupling').value / 10).toFixed(1);
+}
+
+// === PROBABILITY HISTOGRAM ===
+function drawHistogram(options) {
+  const canvas = document.getElementById('prob-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 200; canvas.height = 100;
+  ctx.clearRect(0, 0, 200, 100);
+
+  if (!options || options.length === 0) return;
+
+  const maxSav = Math.max(...options.map(o => o.savings));
+  const barW = Math.max(2, Math.floor(180 / options.length));
+
+  options.forEach((opt, i) => {
+    const h = (opt.probability) * 90;
+    const x = 10 + i * (barW + 1);
+    // Color by rank
+    if (opt.rank === 1) ctx.fillStyle = '#2ecc71';
+    else if (opt.rank <= 3) ctx.fillStyle = '#f0a030';
+    else ctx.fillStyle = '#445566';
+    ctx.fillRect(x, 100 - h, barW, h);
+    // Savings label
+    ctx.fillStyle = '#888';
+    ctx.font = '7px monospace';
+    ctx.fillText(opt.savings, x, 97 - h);
+  });
+
+  // Mark the chosen one
+  const chosen = options.find(o => o.rank === options.find(x => x.vertex === options[0]?.vertex)?.rank);
+}
+
+// === ANIMATION ===
+function animate() {
+  requestAnimationFrame(animate);
+  animFrame++;
+  controls.update();
+
+  // Auto-play
+  if (playing && ws && ws.readyState === 1) {
+    const speed = parseInt(document.getElementById('speed').value);
+    const interval = Math.max(10, 130 - speed * 6);
+    if (animFrame % interval === 0) {
+      ws.send(JSON.stringify({cmd: 'step_with_options'}));
+    }
+  }
+
+  // Gentle pulse
+  [clock0Mesh, clock1Mesh].forEach(m => {
+    const p = 1 + 0.08 * Math.sin(animFrame * 0.04);
+    m.scale.setScalar(p);
+  });
+
+  renderer.render(scene, camera);
+}
+
+// === CONTROLS ===
+window.togglePlay = () => {
+  playing = !playing;
+  document.getElementById('btn-play').textContent = playing ? 'PAUSE' : 'PLAY';
+  document.getElementById('btn-play').classList.toggle('active', playing);
+};
+
+window.stepOnce = () => {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({cmd: 'step_with_options'}));
+  }
+};
+
+window.resetSim = () => {
+  playing = false;
+  document.getElementById('btn-play').textContent = 'PLAY';
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({cmd: 'reset'}));
+  }
+};
+
+window.updateISV = () => {
+  const exp = parseInt(document.getElementById('pel').value);
+  const coupling = parseInt(document.getElementById('coupling').value) / 10;
+  document.getElementById('pel-val').textContent = exp;
+  document.getElementById('coupling-val').textContent = coupling.toFixed(1);
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({cmd: 'set_isv', clock: 0, params: {savings_exponent: exp, coupling_strength: coupling}}));
+    ws.send(JSON.stringify({cmd: 'set_isv', clock: 1, params: {savings_exponent: exp, coupling_strength: coupling}}));
+  }
+};
+
+window.zoomIn = () => {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  camera.position.addScaledVector(dir, 1);
+};
+
+window.zoomOut = () => {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  camera.position.addScaledVector(dir, -1);
+};
+
+// === INIT ===
+const container = document.createElement('div');
+container.id = 'main-canvas';
+document.body.insertBefore(container, document.getElementById('bottom-bar'));
+
+initScene();
+connectWS();
+animate();
+</script>
+</body>
+</html>

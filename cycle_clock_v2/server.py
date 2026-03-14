@@ -1,5 +1,6 @@
 """
 WebSocket server for live cycle clock simulation.
+Also serves static files for the viz.
 
 The front-end sends commands, the server runs the Python engine
 and streams state updates back in real time.
@@ -130,9 +131,19 @@ async def handle(websocket):
 
 async def main():
     init_game()
-    print(f"\nWebSocket server starting on ws://localhost:8765")
+
+    # Start HTTP server for static files in a thread
+    import http.server, threading, os
+    viz_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'viz')
+    handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(*args, directory=viz_dir, **kwargs)
+    httpd = http.server.HTTPServer(('localhost', 8766), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    print(f"Static server: http://localhost:8766")
+
+    print(f"WebSocket server: ws://localhost:8765")
+    print(f"\nOpen http://localhost:8766 in your browser\n")
     async with websockets.serve(handle, "localhost", 8765):
-        await asyncio.Future()  # run forever
+        await asyncio.Future()
 
 
 if __name__ == '__main__':

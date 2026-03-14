@@ -909,12 +909,19 @@ function updateExplodedHex(clockIdx, fiberIdx, a2Fiber) {
   const members = a2Data.cubo_vertex_indices;
   const pts = members.map(i => cuboData.vertices_3d[i]);
 
-  // Outline
-  if (pts.length >= 3) {
+  // Edges: hexagon (6 verts), triangle (3 verts), or antipodal pair (2 verts)
+  if (pts.length >= 2) {
     const opos = [];
-    for (let k = 0; k < pts.length; k++) {
-      const p0 = pts[k], p1 = pts[(k+1) % pts.length];
+    if (pts.length === 2) {
+      // Antipodal pair: single line segment
+      const p0 = pts[0], p1 = pts[1];
       opos.push(p0[0]*scale,p0[1]*scale,p0[2]*scale, p1[0]*scale,p1[1]*scale,p1[2]*scale);
+    } else {
+      // Polygon: connect cyclically
+      for (let k = 0; k < pts.length; k++) {
+        const p0 = pts[k], p1 = pts[(k+1) % pts.length];
+        opos.push(p0[0]*scale,p0[1]*scale,p0[2]*scale, p1[0]*scale,p1[1]*scale,p1[2]*scale);
+      }
     }
     const ogeo = new THREE.BufferGeometry();
     ogeo.setAttribute('position', new THREE.Float32BufferAttribute(opos, 3));

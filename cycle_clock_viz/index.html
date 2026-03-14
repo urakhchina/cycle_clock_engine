@@ -313,7 +313,7 @@ function buildClockGroup(color) {
       const mid = new THREE.Vector3().addVectors(p0, p1).multiplyScalar(0.5);
       const cylGeo = new THREE.CylinderGeometry(0.02, 0.02, len, 6);
       const cylMat = new THREE.MeshBasicMaterial({
-        color: k < 15 ? CHI_PLUS : CHI_MINUS,
+        color: 0x222233,  // initial color, updated by highlight code
         transparent: true, opacity: 0.0  // start invisible
       });
       const cyl = new THREE.Mesh(cylGeo, cylMat);
@@ -520,16 +520,19 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
           nod.material.emissiveIntensity = 0.4;
           nod.scale.setScalar(1.5);
         } else {
-          nod.material.color.setHex(k < 15 ? CHI_PLUS : CHI_MINUS);
-          nod.material.emissive.setHex(k < 15 ? CHI_PLUS : CHI_MINUS);
+          // Actual chirality from orbit fiber data (not step index)
+          const vChi = (hl.orbit_fiber && hl.orbit_fiber[k] < 5) ? CHI_PLUS : CHI_MINUS;
+          nod.material.color.setHex(vChi);
+          nod.material.emissive.setHex(vChi);
           nod.material.emissiveIntensity = 0.3;
           nod.scale.setScalar(1.2);
         }
         nod.material.opacity = 0.9;
       } else {
-        // UNVISITED: very dim, small
-        nod.material.color.setHex(0x222233);
-        nod.material.emissive.setHex(0x111122);
+        // UNVISITED: dim, tinted by actual chirality
+        const uChi = (hl.orbit_fiber && hl.orbit_fiber[k] < 5) ? 0x332211 : 0x221133;
+        nod.material.color.setHex(uChi);
+        nod.material.emissive.setHex(uChi);
         nod.material.emissiveIntensity = 0.05;
         nod.material.opacity = 0.3;
         nod.scale.setScalar(0.6);
@@ -546,7 +549,9 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
       if (!seg) continue;
       if (fullCycle || k < coxeterPhase) {
         seg.material.opacity = 0.7;
-        seg.material.color.setHex(k < 15 ? CHI_PLUS : CHI_MINUS);
+        // Color by ACTUAL chirality of the root at step k
+        const segChi = (hl.orbit_fiber && hl.orbit_fiber[k] < 5) ? CHI_PLUS : CHI_MINUS;
+        seg.material.color.setHex(segChi);
         seg.visible = true;
       } else if (k === coxeterPhase && coxeterPhase > 0) {
         seg.material.opacity = 1.0;
@@ -1030,6 +1035,9 @@ function animate() {
         pa[3]=cuboPs[ci].x; pa[4]=cuboPs[ci].y; pa[5]=cuboPs[ci].z;
         cuboConnectors[ci].geometry.attributes.position.needsUpdate = true;
         cuboConnectors[ci].computeLineDistances();
+        const hasCubo = explodedCubos[ci] && explodedCubos[ci].children.length > 0;
+        const targetOp = hasCubo ? 0.5 : 0.0;
+        cuboConnectors[ci].material.opacity += (targetOp - cuboConnectors[ci].material.opacity) * 0.15;
       }
       if (hexConnectors[ci]) {
         const pa = hexConnectors[ci].geometry.attributes.position.array;
@@ -1037,6 +1045,19 @@ function animate() {
         pa[3]=hexPs[ci].x; pa[4]=hexPs[ci].y; pa[5]=hexPs[ci].z;
         hexConnectors[ci].geometry.attributes.position.needsUpdate = true;
         hexConnectors[ci].computeLineDistances();
+        // Fade connector based on whether hex has content
+        const hasHex = explodedHexes[ci] && explodedHexes[ci].children.length > 0;
+        const targetOpacity = hasHex ? 0.5 : 0.0;
+        hexConnectors[ci].material.opacity += (targetOpacity - hexConnectors[ci].material.opacity) * 0.15;
+      }
+      // Fade hex group in/out smoothly
+      if (explodedHexes[ci]) {
+        explodedHexes[ci].children.forEach(child => {
+          if (child.material) {
+            child.material.transparent = true;
+            if (child.material.opacity < 0.8) child.material.opacity += 0.05;
+          }
+        });
       }
     }
 

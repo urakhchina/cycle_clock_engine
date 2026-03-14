@@ -1,0 +1,3 @@
+[submodule "CCT-StandardModel"]
+	path = CCT-StandardModel
+	url = https://github.com/QGRKlee/CCT-StandardModel.git

@@ -80,12 +80,25 @@ class CycleClock:
         self.coxeter_phase = 0
         self._coxeter_root = coxeter_seed
 
+        # Compute orbit seed: the canonical first root of this orbit
+        self._orbit_seed = self._find_orbit_seed(coxeter_seed)
+
         # Update ISV from initial state
         self._sync_isv()
 
         # History
         self.history: List[Dict] = []
         self._record()
+
+    def _find_orbit_seed(self, root_idx):
+        """Find the canonical seed of the Coxeter orbit containing this root."""
+        # Walk the orbit and return the smallest root index
+        orbit = {root_idx}
+        idx = root_idx
+        for _ in range(29):
+            idx = self.e8.coxeter_perm[idx]
+            orbit.add(idx)
+        return min(orbit)
 
     def _sync_isv(self):
         """Sync cyclic ISVs from current Coxeter root."""
@@ -99,7 +112,17 @@ class CycleClock:
         self.history.append(self.snapshot())
 
     def snapshot(self) -> Dict:
-        """Complete state snapshot."""
+        """Complete state snapshot.
+
+        Emits ALL fields consumed by the viz (Fix: Klee review #2).
+        No notebook augmentation needed.
+        """
+        coxeter_root = int(self._coxeter_root)
+        # Compute A2 fiber from root_a2_fiber map if available
+        a2_fiber = self._get_a2_fiber(coxeter_root)
+        # Local root index within the D4 fiber
+        local_root = self._get_local_root(coxeter_root)
+
         return {
             'clock_id': self.clock_id,
             'step': len(self.history),
@@ -108,13 +131,37 @@ class CycleClock:
             'perp_radius': float(self.fig.perp_radius[self.vertex]),
             'empire_size': int(self.fig.empire_sizes[self.vertex]),
             'coxeter_phase': self.coxeter_phase,
-            'coxeter_root': int(self._coxeter_root),
-            'fiber': int(self.e8.root_fiber[self._coxeter_root]),
+            'coxeter_root': coxeter_root,
+            'fiber': int(self.e8.root_fiber[coxeter_root]),
             'chirality': self.isv.chirality,
             'generation': self.isv.generation,
             'gauge_phase': self.isv.gauge_phase,
             'amplitude': self.isv.amplitude,
+            'a2_fiber': a2_fiber,
+            'local_root_in_d4': local_root,
+            'orbit_seed': int(self._orbit_seed),
         }
+
+    def _get_a2_fiber(self, root_idx):
+        """Get A2 sub-fiber index for this root."""
+        if not hasattr(self, '_a2_map'):
+            try:
+                import json
+                with open('clock_geometry.json') as f:
+                    geom = json.load(f)
+                self._a2_map = {int(k): v for k, v in geom.get('root_a2_fiber', {}).items()}
+            except:
+                self._a2_map = {}
+        return self._a2_map.get(root_idx, 0)
+
+    def _get_local_root(self, root_idx):
+        """Get local index (0-23) within the D4 fiber."""
+        if not hasattr(self, '_local_map'):
+            self._local_map = {}
+            for fi, sh in enumerate(self.e8.shells):
+                for local_i, global_i in enumerate(sh):
+                    self._local_map[global_i] = local_i
+        return self._local_map.get(root_idx, 0)
 
     @property
     def empire(self) -> set:

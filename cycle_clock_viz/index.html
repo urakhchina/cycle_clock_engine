@@ -375,15 +375,9 @@ function buildClockGroup(color) {
 
   // === 24-CELL: nested INSIDE the icosidodecahedron ===
   // The 24-cell (D4) is the fiber the clock currently occupies.
-  // It sits inside the icosidodecahedron (the full Coxeter circuit).
-  // One vertex highlights to show which root within the D4 is active.
-  const cell24Group = new THREE.Group();
-  cell24Group.name = 'cell24';
-  if (clockGeom && clockGeom.cell24_vertices) {
-    // Dashed lines and exploded shapes are built separately in buildExplodedViews()
-  }
-  // Nest inside the icosidodecahedron (same parent: icoGroup)
-  icoGroup.add(cell24Group);
+  // Note: cuboctahedron and hexagon are shown as exploded views
+  // (separate shapes to the right), not nested inside the icosidodecahedron.
+  // See buildExplodedViews() for those constructions.
 
   // Point light for local illumination
   const light = new THREE.PointLight(color, 1.5, 3);
@@ -488,29 +482,7 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
     const hface = explodedHexes[clockIdx].getObjectByName('hexFace');
     if (hface) hface.material.color.setHex(A2_COLORS_U[a2f]);
   }
-  if (icoPoly) {
-    // Update the hexagon: color by current A2 fiber, rotate active vertex
-    const cell24 = icoPoly.getObjectByName('cell24');
-    if (cell24) {
-      const hexFiber = cell24.getObjectByName('hexFiber');
-      if (hexFiber) {
-        const a2f = group.userData.a2Fiber || 0;
-        const hexLines = hexFiber.getObjectByName('hexLines');
-        if (hexLines) hexLines.material.color.setHex(A2_COLORS_U[a2f]);
-        for (let k = 0; k < 6; k++) {
-          const dot = hexFiber.getObjectByName(`hexdot_${k}`);
-          if (dot) dot.material.color.setHex(A2_COLORS_U[a2f]);
-        }
-        // Move the active vertex around the hexagon based on coxeter phase
-        const hexActive = hexFiber.getObjectByName('hexActive');
-        if (hexActive) {
-          const angle = ((coxeterPhase % 6) / 6) * Math.PI * 2;
-          const hs = 0.28;
-          hexActive.position.set(Math.cos(angle)*hs, Math.sin(angle)*hs, 0);
-        }
-      }
-    }
-  }
+  // (Dead cell24/hexFiber code removed — Fix: Klee review #3)
 
   // === THREE-LEVEL VERTEX HIGHLIGHTING on the icosidodecahedron ===
   // The cuboctahedron and hexagon are not separate shapes —
@@ -519,8 +491,13 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   //   teal       = in same D4 fiber (cuboctahedron)
   //   bright A2  = in same D4 AND same A2 (hexagon)
   //   white      = the active root
-  if (icoPoly && clockGeom && clockGeom.highlight) {
-    const hl = clockGeom.highlight;
+  // Use per-orbit highlight data (Fix: Klee review #1)
+  // Each clock has a different Coxeter orbit with different fiber/A2 sequences
+  const orbitSeed = group.userData.orbitSeed || 0;
+  const orbitKey = String(orbitSeed);
+  const allHighlights = clockGeom && clockGeom.orbit_highlights;
+  const hl = allHighlights && allHighlights[orbitKey] ? allHighlights[orbitKey] : (clockGeom && clockGeom.highlight);
+  if (icoPoly && hl) {
     const cuboSteps = new Set((hl.step_cubo[String(coxeterPhase)] || []));
     const hexSteps = new Set((hl.step_hex[String(coxeterPhase)] || []));
     const a2f = group.userData.a2Fiber || 0;
@@ -631,6 +608,9 @@ function updateStep(step) {
   clock2Mesh.userData.a2Fiber = c1.a2_fiber || 0;
   clock1Mesh.userData.localRoot = c0.local_root_in_d4 || 0;
   clock2Mesh.userData.localRoot = c1.local_root_in_d4 || 0;
+  // Per-clock orbit seed for correct highlight data (Fix: Klee review #1)
+  clock1Mesh.userData.orbitSeed = c0.orbit_seed || 0;
+  clock2Mesh.userData.orbitSeed = c1.orbit_seed || 0;
   updateClockAppearance(clock1Mesh, chi0, c0.generation, c0.coxeter_phase, c0.empire_size, step);
   updateClockAppearance(clock2Mesh, chi1, c1.generation, c1.coxeter_phase, c1.empire_size, step);
 

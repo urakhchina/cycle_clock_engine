@@ -94,7 +94,6 @@ canvas { display: block; }
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 
 // === GLOBALS ===
 let scene, camera, renderer, controls;
@@ -125,7 +124,7 @@ async function init() {
     const [boardResp, histResp, icosiResp] = await Promise.all([
       fetch('../fig_gameboard.json'),
       fetch('../game_history.json'),
-      fetch('../icosidodecahedron.json?v=3')
+      fetch('../icosidodecahedron.json?v=4')
     ]);
     boardData = await boardResp.json();
     historyData = await histResp.json();
@@ -221,38 +220,38 @@ function buildBoard() {
 function buildClockGroup(color) {
   const group = new THREE.Group();
 
-  // No orb — the icosidodecahedron IS the particle.
-  // Just a small core dot at center for position reference
-  const coreGeo = new THREE.SphereGeometry(0.04, 12, 12);
-  const coreMat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.9
+  // Core orb — the particle marker
+  const coreGeo = new THREE.SphereGeometry(0.18, 32, 32);
+  const coreMat = new THREE.MeshPhongMaterial({
+    color, emissive: color, emissiveIntensity: 0.8,
+    transparent: true, opacity: 0.95
   });
   const core = new THREE.Mesh(coreGeo, coreMat);
   core.name = 'core';
   group.add(core);
 
-  // Glow halo emanates from the icosidodecahedron
-  const haloGeo = new THREE.SphereGeometry(1.0, 16, 16);
+  // Inner glow halo
+  const haloGeo = new THREE.SphereGeometry(0.30, 32, 32);
   const haloMat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.06
+    color, transparent: true, opacity: 0.18
   });
   const halo = new THREE.Mesh(haloGeo, haloMat);
   halo.name = 'halo';
   group.add(halo);
 
   // Outer glow
-  const outerGeo = new THREE.SphereGeometry(1.4, 16, 16);
+  const outerGeo = new THREE.SphereGeometry(0.50, 16, 16);
   const outerMat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.025
+    color, transparent: true, opacity: 0.06
   });
   const outer = new THREE.Mesh(outerGeo, outerMat);
   outer.name = 'outer';
   group.add(outer);
 
-  // Generation ring around the icosidodecahedron
-  const ringGeo = new THREE.TorusGeometry(0.9, 0.015, 8, 48);
+  // Generation ring
+  const ringGeo = new THREE.TorusGeometry(0.28, 0.02, 8, 32);
   const ringMat = new THREE.MeshBasicMaterial({
-    color: GEN_COLORS[0], transparent: true, opacity: 0.6
+    color: GEN_COLORS[0], transparent: true, opacity: 0.7
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.rotation.x = Math.PI / 2;
@@ -270,29 +269,23 @@ function buildClockGroup(color) {
       return new THREE.Vector3(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale);
     };
 
-    // === SOLID POLYHEDRON via ConvexGeometry ===
-    const points = icosiData.vertices.map(v =>
-      new THREE.Vector3(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale));
+    // === SOLID POLYHEDRON from pre-computed hull triangles ===
+    if (icosiData.hull_positions) {
+      const hullPos = icosiData.hull_positions.map((v,i) => v * icoScale);
+      const solidGeo = new THREE.BufferGeometry();
+      solidGeo.setAttribute('position', new THREE.Float32BufferAttribute(hullPos, 3));
+      solidGeo.computeVertexNormals();
+      const solidMat = new THREE.MeshPhongMaterial({
+        color, emissive: color, emissiveIntensity: 0.2,
+        transparent: true, opacity: 0.18, side: THREE.DoubleSide,
+        shininess: 80, specular: 0x444444
+      });
+      const solidMesh = new THREE.Mesh(solidGeo, solidMat);
+      solidMesh.name = 'solidBody';
+      icoGroup.add(solidMesh);
+    }
 
-    // Solid body — semi-transparent with chirality color
-    const solidGeo = new ConvexGeometry(points);
-    const solidMat = new THREE.MeshPhongMaterial({
-      color, emissive: color, emissiveIntensity: 0.15,
-      transparent: true, opacity: 0.12, side: THREE.DoubleSide,
-      shininess: 60
-    });
-    const solidMesh = new THREE.Mesh(solidGeo, solidMat);
-    solidMesh.name = 'solidBody';
-    icoGroup.add(solidMesh);
-
-    // Wireframe overlay on the solid — shows the edges clearly
-    const wireGeo = new ConvexGeometry(points);
-    const wireMat = new THREE.MeshBasicMaterial({
-      color: 0xccddff, wireframe: true, transparent: true, opacity: 0.4
-    });
-    icoGroup.add(new THREE.Mesh(wireGeo, wireMat));
-
-    // Explicit edges (brighter, on top of wireframe)
+    // Wireframe edges — the true icosidodecahedron structure
     const edgePositions = [];
     icosiData.edges.forEach(([a, b]) => {
       const va = sv(a), vb = sv(b);
@@ -300,7 +293,7 @@ function buildClockGroup(color) {
     });
     const edgeGeo = new THREE.BufferGeometry();
     edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0xccddff, transparent: true, opacity: 0.7 });
     const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
     icoGroup.add(edgeLines);
 
@@ -341,11 +334,11 @@ function buildClockGroup(color) {
     curMarker.name = 'icoCurrent';
     icoGroup.add(curMarker);
   }
-  // The icosidodecahedron IS the clock — centered on the particle position
+  icoGroup.position.set(0, 1.5, 0);  // float above the particle orb
   group.add(icoGroup);
 
   // Closure flash ring
-  const flashGeo = new THREE.TorusGeometry(1.0, 0.03, 8, 32);
+  const flashGeo = new THREE.TorusGeometry(0.45, 0.04, 8, 32);
   const flashMat = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.0
   });
@@ -395,7 +388,7 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   const flash = group.getObjectByName('closureFlash');
 
   // Chirality color
-  if (core) core.material.color.setHex(chiColor);
+  if (core) { core.material.color.setHex(chiColor); core.material.emissive.setHex(chiColor); }
   if (halo) halo.material.color.setHex(chiColor);
   if (outer) outer.material.color.setHex(chiColor);
   if (light) light.color.setHex(chiColor);

@@ -8,83 +8,77 @@
 body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
 canvas { display: block; }
 
-#hud {
-  position: absolute; top: 20px; left: 20px;
-  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
-  border: 1px solid rgba(100,150,255,0.3); min-width: 320px;
-  font-size: 12px; line-height: 1.6;
+.panel {
+  background: rgba(10,10,30,0.85); padding: 10px 14px; border-radius: 6px;
+  border: 1px solid rgba(100,150,255,0.3); font-size: 11px; line-height: 1.5;
 }
-#hud h1 { font-size: 16px; color: #88bbff; margin-bottom: 8px; }
-#hud .label { color: #888; }
-#hud .val { color: #fff; font-weight: bold; }
-#hud .chi-plus { color: #f0a030; }
-#hud .chi-minus { color: #a060f0; }
-#hud .gen0 { color: #e74c3c; }
-#hud .gen1 { color: #2ecc71; }
-#hud .gen2 { color: #3498db; }
+.label { color: #888; }
+.val { color: #fff; font-weight: bold; }
+.chi-plus { color: #f0a030; }
+.chi-minus { color: #a060f0; }
+.gen0 { color: #e74c3c; }
+.gen1 { color: #2ecc71; }
+.gen2 { color: #3498db; }
 
-#controls {
-  position: absolute; bottom: 20px; left: 20px;
-  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
-  border: 1px solid rgba(100,150,255,0.3);
-  font-size: 12px;
+/* Bottom bar: all panels in a row */
+#bottom-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; gap: 8px; padding: 10px;
+  background: rgba(5,5,15,0.9);
+  border-top: 1px solid rgba(100,150,255,0.2);
+  align-items: flex-start;
+  z-index: 10;
 }
+#bottom-bar > div { flex-shrink: 0; }
+
 #controls button {
   background: rgba(100,150,255,0.3); color: #fff; border: 1px solid rgba(100,150,255,0.5);
-  padding: 6px 16px; margin: 4px; border-radius: 4px; cursor: pointer; font-family: inherit;
+  padding: 4px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 11px;
 }
 #controls button:hover { background: rgba(100,150,255,0.5); }
 #controls button.active { background: rgba(100,200,100,0.5); border-color: rgba(100,200,100,0.7); }
 
-#phase-ring {
-  position: absolute; top: 20px; right: 20px;
-  width: 180px; height: 180px;
-}
+#phase-ring { width: 100px; height: 100px; }
 
-#overlap-bar {
-  position: absolute; bottom: 20px; right: 20px;
-  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
-  border: 1px solid rgba(100,150,255,0.3); width: 280px;
-}
-.bar-track { background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; margin: 4px 0; }
-.bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.bar-track { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; margin: 3px 0; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
 </style>
 </head>
 <body>
 
-<div id="hud">
-  <h1>CYCLE CLOCK</h1>
-  <div id="clock1-info"></div>
-  <hr style="border-color: rgba(100,150,255,0.2); margin: 8px 0;">
-  <div id="clock2-info"></div>
-  <hr style="border-color: rgba(100,150,255,0.2); margin: 8px 0;">
-  <div id="step-info"></div>
-</div>
+<div id="bottom-bar">
+  <div class="panel" id="controls">
+    <button id="btn-play" onclick="togglePlay()">PLAY</button>
+    <button id="btn-step" onclick="stepOnce()">STEP</button>
+    <button id="btn-reset" onclick="resetSim()">RESET</button>
+    <button onclick="zoomIn()">+</button>
+    <button onclick="zoomOut()">−</button>
+    <br>
+    <span>Speed:</span>
+    <input type="range" id="speed" min="1" max="20" value="3" style="width:60px;vertical-align:middle;">
+    <span>PEL:</span>
+    <input type="range" id="pel" min="1" max="40" value="10" style="width:60px;vertical-align:middle;">
+    <span id="pel-val">10</span>
+  </div>
 
-<div id="controls">
-  <button id="btn-play" onclick="togglePlay()">PLAY</button>
-  <button id="btn-step" onclick="stepOnce()">STEP</button>
-  <button id="btn-reset" onclick="resetSim()">RESET</button>
-  <span style="margin-left: 12px;">Speed:</span>
-  <input type="range" id="speed" min="1" max="20" value="3" style="vertical-align: middle;">
-  <br>
-  <span>PEL exponent:</span>
-  <input type="range" id="pel" min="1" max="40" value="10" style="vertical-align: middle;">
-  <span id="pel-val">10</span>
-  <br>
-  <button onclick="zoomIn()">+ Zoom In</button>
-  <button onclick="zoomOut()">− Zoom Out</button>
-</div>
+  <div class="panel" id="hud">
+    <div id="clock1-info"></div>
+    <div id="clock2-info"></div>
+    <div id="step-info"></div>
+  </div>
 
-<canvas id="phase-ring"></canvas>
+  <div class="panel">
+    <canvas id="phase-ring"></canvas>
+  </div>
 
-<div id="overlap-bar">
-  <div><span class="label">Empire Overlap</span> <span id="overlap-val" class="val">0</span></div>
-  <div class="bar-track"><div class="bar-fill" id="overlap-fill" style="width:0%;background:#88bbff;"></div></div>
-  <div><span class="label">3D Distance</span> <span id="dist-val" class="val">0</span></div>
-  <div class="bar-track"><div class="bar-fill" id="dist-fill" style="width:0%;background:#f0a030;"></div></div>
-  <div><span class="label">Savings (C0)</span> <span id="sav1-val" class="val">0</span></div>
-  <div class="bar-track"><div class="bar-fill" id="sav1-fill" style="width:0%;background:#2ecc71;"></div></div>
+  <div class="panel" id="overlap-bar">
+    <div><span class="label">Overlap</span> <span id="overlap-val" class="val">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="overlap-fill" style="width:0%;background:#88bbff;"></div></div>
+    <div><span class="label">Distance</span> <span id="dist-val" class="val">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="dist-fill" style="width:0%;background:#f0a030;"></div></div>
+    <div><span class="label">Savings</span> <span id="sav1-val" class="val">0</span></div>
+    <div class="bar-track"><div class="bar-fill" id="sav1-fill" style="width:0%;background:#2ecc71;"></div></div>
+  </div>
 </div>
 
 <script type="importmap">
@@ -125,7 +119,7 @@ async function init() {
       fetch('../fig_gameboard.json'),
       fetch('../game_history.json'),
       fetch('../icosidodecahedron.json?v=5'),
-      fetch('../clock_geometry.json?v=1')
+      fetch('../clock_geometry.json?v=2')
     ]);
     boardData = await boardResp.json();
     historyData = await histResp.json();
@@ -142,7 +136,7 @@ async function init() {
   scene.fog = new THREE.FogExp2(0x0a0a1a, 0.03);
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
-  camera.position.set(5, 4, 6);
+  camera.position.set(4, 3, 10);  // pulled back to see both FIG (left) and icosi (right)
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -192,7 +186,7 @@ function buildBoard() {
     const color = new THREE.Color().setHSL(0.58, 0.2, 0.08 + empRatio * 0.12);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.15 });
     const mesh = new THREE.Mesh(vertGeo, mat);
-    mesh.position.set(p[0], p[1], p[2]);
+    mesh.position.set(p[0] - 3, p[1], p[2]);  // shift FIG left
     mesh.userData = { idx: i, empSize: empSizes[i], baseOpacity: 0.4 };
     scene.add(mesh);
     vertexMeshes.push(mesh);
@@ -204,10 +198,12 @@ function buildBoard() {
   const edgeColors = [];
   const maxSav = Math.max(...boardData.edge_savings);
 
+  const FIG_OFFSET = -1.5;
   boardData.edges.forEach((e, idx) => {
     const [i, j] = e;
     const s = boardData.edge_savings[idx] / maxSav;
-    edgePositions.push(...positions[i], ...positions[j]);
+    edgePositions.push(positions[i][0]-3, positions[i][1], positions[i][2],
+                       positions[j][0]-3, positions[j][1], positions[j][2]);
     const c = new THREE.Color().setHSL(0.58, 0.5, s * 0.3);
     edgeColors.push(c.r, c.g, c.b, c.r, c.g, c.b);
   });
@@ -271,19 +267,20 @@ function buildClockGroup(color) {
       return new THREE.Vector3(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale);
     };
 
-    // === SOLID POLYHEDRON from pre-computed hull triangles ===
+    // Icosidodecahedron: glass-like transparent shell
     if (icosiData.hull_positions) {
       const hullPos = icosiData.hull_positions.map((v,i) => v * icoScale);
       const solidGeo = new THREE.BufferGeometry();
       solidGeo.setAttribute('position', new THREE.Float32BufferAttribute(hullPos, 3));
       solidGeo.computeVertexNormals();
       const solidMat = new THREE.MeshPhongMaterial({
-        color, emissive: color, emissiveIntensity: 0.2,
-        transparent: true, opacity: 0.18, side: THREE.DoubleSide,
-        shininess: 80, specular: 0x444444
+        color, emissive: color, emissiveIntensity: 0.05,
+        transparent: true, opacity: 0.04, side: THREE.DoubleSide,
+        depthWrite: false  // don't occlude things behind it
       });
       const solidMesh = new THREE.Mesh(solidGeo, solidMat);
       solidMesh.name = 'solidBody';
+      solidMesh.renderOrder = -1;  // render first so inner objects show on top
       icoGroup.add(solidMesh);
     }
 
@@ -295,7 +292,7 @@ function buildClockGroup(color) {
     });
     const edgeGeo = new THREE.BufferGeometry();
     edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0xccddff, transparent: true, opacity: 0.7 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x556688, transparent: true, opacity: 0.3 });
     const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
     icoGroup.add(edgeLines);
 
@@ -336,8 +333,10 @@ function buildClockGroup(color) {
     curMarker.name = 'icoCurrent';
     icoGroup.add(curMarker);
   }
-  icoGroup.position.set(0, 1.5, 0);  // float above the particle orb
-  group.add(icoGroup);
+  // Icosidodecahedron is NOT added to the orb group.
+  // It will be placed at a fixed position to the right of the FIG.
+  // Store it on the group for later retrieval.
+  group.userData.icoGroup = icoGroup;
 
   // Closure flash ring
   const flashGeo = new THREE.TorusGeometry(0.45, 0.04, 8, 32);
@@ -349,62 +348,104 @@ function buildClockGroup(color) {
   flash.name = 'closureFlash';
   group.add(flash);
 
-  // === HEXAGONAL RING: the A2 fiber (6-fold structure) ===
-  const hexGroup = new THREE.Group();
-  hexGroup.name = 'hexRing';
-  const hexRadius = 0.35;
-  const hexGeo = new THREE.BufferGeometry();
-  const hexPos = [];
+  // A2 color palette (used by 24-cell and nested hexagon)
   const A2_COLORS = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
-  for (let k = 0; k <= 6; k++) {
-    const angle = (k / 6) * Math.PI * 2;
-    hexPos.push(Math.cos(angle) * hexRadius, 0, Math.sin(angle) * hexRadius);
-  }
-  hexGeo.setAttribute('position', new THREE.Float32BufferAttribute(hexPos, 3));
-  const hexMat = new THREE.LineBasicMaterial({ color: A2_COLORS[0], transparent: true, opacity: 0.8 });
-  const hexLine = new THREE.Line(hexGeo, hexMat);
-  hexLine.name = 'hexLine';
-  hexGroup.add(hexLine);
-  // 6 vertex dots on the hexagon
-  const hexDotGeo = new THREE.SphereGeometry(0.025, 6, 6);
-  for (let k = 0; k < 6; k++) {
-    const angle = (k / 6) * Math.PI * 2;
-    const dot = new THREE.Mesh(hexDotGeo, new THREE.MeshBasicMaterial({ color: A2_COLORS[0] }));
-    dot.position.set(Math.cos(angle) * hexRadius, 0, Math.sin(angle) * hexRadius);
-    dot.name = `hexDot_${k}`;
-    hexGroup.add(dot);
-  }
-  hexGroup.position.set(0, -0.3, 0);  // below the orb
-  group.add(hexGroup);
 
-  // === 24-CELL SILHOUETTE: the D4 shell ===
+  // === 24-CELL: nested INSIDE the icosidodecahedron ===
+  // The 24-cell (D4) is the fiber the clock currently occupies.
+  // It sits inside the icosidodecahedron (the full Coxeter circuit).
+  // One vertex highlights to show which root within the D4 is active.
   const cell24Group = new THREE.Group();
   cell24Group.name = 'cell24';
   if (clockGeom && clockGeom.cell24_vertices) {
-    const c24Scale = 0.9;
-    const c24Pos = [];
-    clockGeom.cell24_edges.forEach(([a, b]) => {
-      const va = clockGeom.cell24_vertices[a];
-      const vb = clockGeom.cell24_vertices[b];
-      c24Pos.push(va[0]*c24Scale, va[1]*c24Scale, va[2]*c24Scale);
-      c24Pos.push(vb[0]*c24Scale, vb[1]*c24Scale, vb[2]*c24Scale);
-    });
-    const c24Geo = new THREE.BufferGeometry();
-    c24Geo.setAttribute('position', new THREE.Float32BufferAttribute(c24Pos, 3));
-    const c24Mat = new THREE.LineBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.6 });
-    cell24Group.add(new THREE.LineSegments(c24Geo, c24Mat));
-    // Color vertices by A2 fiber
-    const c24DotGeo = new THREE.SphereGeometry(0.04, 8, 8);
-    clockGeom.cell24_vertices.forEach((v, i) => {
-      const a2f = (clockGeom.cell24_a2_fibers || [])[i] || 0;
-      const dot = new THREE.Mesh(c24DotGeo,
-        new THREE.MeshBasicMaterial({ color: A2_COLORS[a2f], transparent: true, opacity: 0.8 }));
-      dot.position.set(v[0]*c24Scale, v[1]*c24Scale, v[2]*c24Scale);
+    // === MIDDLE LAYER: CUBOCTAHEDRON (A₃ conformal shadow of D₄) ===
+    // 12 vertices, 24 edges — the clean 3D shape from Theorem 1.6(c)
+    // Standard cuboctahedron: all permutations of (0, ±1, ±1)
+    const cuboScale = 0.55;
+    const cuboVerts = [];
+    for (let i = 0; i < 3; i++) {
+      for (let s1 of [-1, 1]) {
+        for (let s2 of [-1, 1]) {
+          const v = [0, 0, 0];
+          v[(i+1)%3] = s1; v[(i+2)%3] = s2;
+          cuboVerts.push(new THREE.Vector3(v[0]*cuboScale, v[1]*cuboScale, v[2]*cuboScale));
+        }
+      }
+    }
+    // Find cuboctahedron edges (distance = √2 * scale)
+    const cuboEdgeD = Math.sqrt(2) * cuboScale;
+    const cuboEdgePos = [];
+    for (let i = 0; i < 12; i++) {
+      for (let j = i+1; j < 12; j++) {
+        if (Math.abs(cuboVerts[i].distanceTo(cuboVerts[j]) - cuboEdgeD) < 0.01) {
+          cuboEdgePos.push(cuboVerts[i].x, cuboVerts[i].y, cuboVerts[i].z);
+          cuboEdgePos.push(cuboVerts[j].x, cuboVerts[j].y, cuboVerts[j].z);
+        }
+      }
+    }
+    const cuboEdgeGeo = new THREE.BufferGeometry();
+    cuboEdgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(cuboEdgePos, 3));
+    const cuboEdgeMat = new THREE.LineBasicMaterial({ color: 0x44aacc, transparent: true, opacity: 0.6 });
+    cell24Group.add(new THREE.LineSegments(cuboEdgeGeo, cuboEdgeMat));
+    // Cuboctahedron vertex dots
+    const cuboDotGeo = new THREE.SphereGeometry(0.035, 8, 8);
+    cuboVerts.forEach((v, i) => {
+      const dot = new THREE.Mesh(cuboDotGeo,
+        new THREE.MeshBasicMaterial({ color: 0x44aacc, transparent: true, opacity: 0.7 }));
+      dot.position.copy(v);
+      dot.name = `cubodot_${i}`;
       cell24Group.add(dot);
     });
+    // Transparent shell
+    const cuboShellGeo = new THREE.SphereGeometry(cuboScale * 1.05, 16, 16);
+    const cuboShellMat = new THREE.MeshPhongMaterial({
+      color: 0x4488aa, emissive: 0x112233, emissiveIntensity: 0.05,
+      transparent: true, opacity: 0.03, side: THREE.DoubleSide, depthWrite: false
+    });
+    const cuboShell = new THREE.Mesh(cuboShellGeo, cuboShellMat);
+    cuboShell.renderOrder = 0;
+    cell24Group.add(cuboShell);
+
+    // === INNER LAYER: HEXAGON (A₂ fiber — always flat and clean) ===
+    const hexGroup = new THREE.Group();
+    hexGroup.name = 'hexFiber';
+    const hexScale = 0.28;
+    // Flat regular hexagon in the XY plane
+    const hexEdgePos = [];
+    const hexDotGeo = new THREE.SphereGeometry(0.04, 8, 8);
+    for (let k = 0; k < 6; k++) {
+      const a1 = (k / 6) * Math.PI * 2;
+      const a2 = ((k+1) / 6) * Math.PI * 2;
+      hexEdgePos.push(
+        Math.cos(a1)*hexScale, Math.sin(a1)*hexScale, 0,
+        Math.cos(a2)*hexScale, Math.sin(a2)*hexScale, 0
+      );
+      const dot = new THREE.Mesh(hexDotGeo,
+        new THREE.MeshBasicMaterial({ color: A2_COLORS[0] }));
+      dot.position.set(Math.cos(a1)*hexScale, Math.sin(a1)*hexScale, 0);
+      dot.name = `hexdot_${k}`;
+      hexGroup.add(dot);
+    }
+    const hexEdgeGeo = new THREE.BufferGeometry();
+    hexEdgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(hexEdgePos, 3));
+    const hexEdgeMat = new THREE.LineBasicMaterial({ color: A2_COLORS[0], transparent: true, opacity: 1.0 });
+    const hexLines = new THREE.LineSegments(hexEdgeGeo, hexEdgeMat);
+    hexLines.name = 'hexLines';
+    hexGroup.add(hexLines);
+    // Active vertex on hexagon
+    const hexActiveDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    hexActiveDot.name = 'hexActive';
+    hexActiveDot.position.set(hexScale, 0, 0);
+    hexGroup.add(hexActiveDot);
+    cell24Group.add(hexGroup);
+
+    // Counter-rotate the cuboctahedron layer inside the icosidodecahedron
+    cell24Group.userData.spinSpeed = 0.006;
   }
-  cell24Group.position.set(0, 0, 0);  // centered on the orb
-  group.add(cell24Group);
+  // Nest inside the icosidodecahedron (same parent: icoGroup)
+  icoGroup.add(cell24Group);
 
   // Point light for local illumination
   const light = new THREE.PointLight(color, 1.5, 3);
@@ -414,6 +455,11 @@ function buildClockGroup(color) {
   return group;
 }
 
+let ico1Group, ico2Group;
+let connector1, connector2;
+const ICO_POS_1 = new THREE.Vector3(4, 1.8, 0);
+const ICO_POS_2 = new THREE.Vector3(4, -1.8, 0);
+
 function buildClocks() {
   console.log('buildClocks called, icosiData:', icosiData ? 'yes' : 'no');
   clock1Mesh = buildClockGroup(CHI_PLUS);
@@ -422,14 +468,35 @@ function buildClocks() {
   clock2Mesh = buildClockGroup(CHI_MINUS);
   scene.add(clock2Mesh);
 
-  // Position them at initial locations
+  // Place icosidodecahedra at fixed positions to the right
+  ico1Group = clock1Mesh.userData.icoGroup;
+  ico2Group = clock2Mesh.userData.icoGroup;
+  if (ico1Group) { ico1Group.position.copy(ICO_POS_1); scene.add(ico1Group); }
+  if (ico2Group) { ico2Group.position.copy(ICO_POS_2); scene.add(ico2Group); }
+
+  // Dotted connector lines from orbs to their icosidodecahedra
+  const connGeo1 = new THREE.BufferGeometry();
+  connGeo1.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 0,0,0], 3));
+  connector1 = new THREE.Line(connGeo1,
+    new THREE.LineDashedMaterial({ color: CHI_PLUS, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.5 }));
+  connector1.computeLineDistances();
+  scene.add(connector1);
+
+  const connGeo2 = new THREE.BufferGeometry();
+  connGeo2.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 0,0,0], 3));
+  connector2 = new THREE.Line(connGeo2,
+    new THREE.LineDashedMaterial({ color: CHI_MINUS, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.5 }));
+  connector2.computeLineDistances();
+  scene.add(connector2);
+
+  // Position orbs at initial locations (with FIG offset)
   if (historyData && historyData.clocks) {
     const h0 = historyData.clocks[0].history[0];
     const h1 = historyData.clocks[1].history[0];
-    clock1Mesh.position.set(...h0.pos_3d);
-    clock2Mesh.position.set(...h1.pos_3d);
-    targetPos0.set(...h0.pos_3d);
-    targetPos1.set(...h1.pos_3d);
+    clock1Mesh.position.set(h0.pos_3d[0]-3, h0.pos_3d[1], h0.pos_3d[2]);
+    clock2Mesh.position.set(h1.pos_3d[0]-3, h1.pos_3d[1], h1.pos_3d[2]);
+    targetPos0.copy(clock1Mesh.position);
+    targetPos1.copy(clock2Mesh.position);
   }
 }
 
@@ -461,26 +528,37 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   if (halo) halo.scale.setScalar(empScale * 1.5);
   if (outer) outer.scale.setScalar(empScale * 2.0);
 
-  // Hexagonal ring: color by A2 fiber
-  const A2_COLORS = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
-  const hexRing = group.getObjectByName('hexRing');
-  if (hexRing) {
-    const a2Fiber = group.userData.a2Fiber || 0;
-    const hexLine = hexRing.getObjectByName('hexLine');
-    if (hexLine) hexLine.material.color.setHex(A2_COLORS[a2Fiber]);
-    for (let k = 0; k < 6; k++) {
-      const dot = hexRing.getObjectByName(`hexDot_${k}`);
-      if (dot) dot.material.color.setHex(A2_COLORS[a2Fiber]);
-    }
-  }
+  // Nested hexagon inside 24-cell: color by A2 fiber
+  const A2_COLORS_U = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
 
-  // Update solid body color
-  const icoPoly = group.getObjectByName('coxeterPoly');
+  // Update icosidodecahedron + nested 24-cell (now detached, stored in userData)
+  const icoPoly = group.userData.icoGroup;
   if (icoPoly) {
     const solidBody = icoPoly.getObjectByName('solidBody');
     if (solidBody) {
       solidBody.material.color.setHex(chiColor);
       solidBody.material.emissive.setHex(chiColor);
+    }
+    // Update the hexagon: color by current A2 fiber, rotate active vertex
+    const cell24 = icoPoly.getObjectByName('cell24');
+    if (cell24) {
+      const hexFiber = cell24.getObjectByName('hexFiber');
+      if (hexFiber) {
+        const a2f = group.userData.a2Fiber || 0;
+        const hexLines = hexFiber.getObjectByName('hexLines');
+        if (hexLines) hexLines.material.color.setHex(A2_COLORS_U[a2f]);
+        for (let k = 0; k < 6; k++) {
+          const dot = hexFiber.getObjectByName(`hexdot_${k}`);
+          if (dot) dot.material.color.setHex(A2_COLORS_U[a2f]);
+        }
+        // Move the active vertex around the hexagon based on coxeter phase
+        const hexActive = hexFiber.getObjectByName('hexActive');
+        if (hexActive) {
+          const angle = ((coxeterPhase % 6) / 6) * Math.PI * 2;
+          const hs = 0.28;
+          hexActive.position.set(Math.cos(angle)*hs, Math.sin(angle)*hs, 0);
+        }
+      }
     }
   }
 
@@ -540,15 +618,17 @@ function updateStep(step) {
   const c0 = historyData.clocks[0].history[step];
   const c1 = historyData.clocks[1].history[step];
 
-  // Set interpolation targets (smooth movement)
-  targetPos0.set(...c0.pos_3d);
-  targetPos1.set(...c1.pos_3d);
+  // Set interpolation targets (smooth movement, with FIG offset)
+  targetPos0.set(c0.pos_3d[0] - 3, c0.pos_3d[1], c0.pos_3d[2]);
+  targetPos1.set(c1.pos_3d[0] - 3, c1.pos_3d[1], c1.pos_3d[2]);
 
-  // Update colors, phase dots, empire sizing, A2 fiber
+  // Update colors, phase dots, empire sizing, A2 fiber, active root
   const chi0 = c0.chirality > 0 ? CHI_PLUS : CHI_MINUS;
   const chi1 = c1.chirality > 0 ? CHI_PLUS : CHI_MINUS;
   clock1Mesh.userData.a2Fiber = c0.a2_fiber || 0;
   clock2Mesh.userData.a2Fiber = c1.a2_fiber || 0;
+  clock1Mesh.userData.localRoot = c0.local_root_in_d4 || 0;
+  clock2Mesh.userData.localRoot = c1.local_root_in_d4 || 0;
   updateClockAppearance(clock1Mesh, chi0, c0.generation, c0.coxeter_phase, c0.empire_size, step);
   updateClockAppearance(clock2Mesh, chi1, c1.generation, c1.coxeter_phase, c1.empire_size, step);
 
@@ -587,7 +667,7 @@ function updateStep(step) {
 function highlightEmpire(v0, v1) {
   // Reset all vertices
   vertexMeshes.forEach(m => {
-    m.material.opacity = m.userData.baseOpacity;
+    m.material.opacity = m.userData.baseOpacity || 0.15;
     m.scale.setScalar(1);
   });
 
@@ -728,7 +808,7 @@ function buildPathLines() {
     const positions = [];
     const colors = [];
     for (let i = 0; i < history.length; i++) {
-      positions.push(...history[i].pos_3d);
+      positions.push(history[i].pos_3d[0]-3, history[i].pos_3d[1], history[i].pos_3d[2]);
       // Color by chirality at that step
       const c = new THREE.Color(history[i].chirality > 0 ? CHI_PLUS : CHI_MINUS);
       colors.push(c.r, c.g, c.b);
@@ -799,23 +879,49 @@ function animate() {
     if (ring1) ring1.rotation.z += 0.015;
     if (ring2) ring2.rotation.z -= 0.015;
 
-    // Slowly tumble the icosidodecahedra
-    const ico1 = clock1Mesh.getObjectByName('coxeterPoly');
-    const ico2 = clock2Mesh.getObjectByName('coxeterPoly');
-    if (ico1) { ico1.rotation.y += 0.003; ico1.rotation.x += 0.001; }
-    if (ico2) { ico2.rotation.y -= 0.003; ico2.rotation.x += 0.001; }
+    // Three nested layers each spinning at different rates
+    // Icosidodecahedron (outer): slow tumble
+    if (ico1Group) { ico1Group.rotation.y += 0.003; ico1Group.rotation.x += 0.001; }
+    if (ico2Group) { ico2Group.rotation.y -= 0.003; ico2Group.rotation.x += 0.001; }
 
-    // Rotate hex rings (A2 fiber indicator)
-    const hex1 = clock1Mesh.getObjectByName('hexRing');
-    const hex2 = clock2Mesh.getObjectByName('hexRing');
-    if (hex1) hex1.rotation.y += 0.01;
-    if (hex2) hex2.rotation.y -= 0.01;
+    // Cuboctahedron layer: counter-rotates inside the icosidodecahedron
+    // Hexagon: counter-rotates inside the cuboctahedron
+    [ico1Group, ico2Group].forEach((icoG, idx) => {
+      if (!icoG) return;
+      const c24 = icoG.getObjectByName('cell24');
+      if (c24) {
+        const dir = idx === 0 ? 1 : -1;
+        c24.rotation.y += dir * (c24.userData.spinSpeed || 0.006);
+        c24.rotation.x += 0.002;
+        const hex = c24.getObjectByName('hexFiber');
+        if (hex) {
+          hex.rotation.z += dir * -0.012;  // fastest, opposite direction
+          hex.rotation.y += 0.004;
+        }
+      }
+    });
 
-    // Slowly rotate 24-cells
-    const c24_1 = clock1Mesh.getObjectByName('cell24');
-    const c24_2 = clock2Mesh.getObjectByName('cell24');
-    if (c24_1) { c24_1.rotation.y += 0.005; c24_1.rotation.z += 0.002; }
-    if (c24_2) { c24_2.rotation.y -= 0.005; c24_2.rotation.z += 0.002; }
+    // Update connector lines from orbs to icosidodecahedra
+    if (connector1 && clock1Mesh) {
+      const p = clock1Mesh.position;
+      const posArr = connector1.geometry.attributes.position.array;
+      posArr[0]=p.x; posArr[1]=p.y; posArr[2]=p.z;
+      posArr[3]=ICO_POS_1.x; posArr[4]=ICO_POS_1.y; posArr[5]=ICO_POS_1.z;
+      connector1.geometry.attributes.position.needsUpdate = true;
+      connector1.computeLineDistances();
+      connector1.material.color.setHex(clock1Mesh.getObjectByName('core')?.material.color.getHex() || CHI_PLUS);
+    }
+    if (connector2 && clock2Mesh) {
+      const p = clock2Mesh.position;
+      const posArr = connector2.geometry.attributes.position.array;
+      posArr[0]=p.x; posArr[1]=p.y; posArr[2]=p.z;
+      posArr[3]=ICO_POS_2.x; posArr[4]=ICO_POS_2.y; posArr[5]=ICO_POS_2.z;
+      connector2.geometry.attributes.position.needsUpdate = true;
+      connector2.computeLineDistances();
+      connector2.material.color.setHex(clock2Mesh.getObjectByName('core')?.material.color.getHex() || CHI_MINUS);
+    }
+
+    // 24-cell now nested inside icosidodecahedron — rotates with it
   }
 
   renderer.render(scene, camera);

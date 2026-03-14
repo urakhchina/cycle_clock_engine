@@ -23,14 +23,14 @@ class Game:
     Then runs cycle clocks with step-by-step probability tracking.
     """
 
-    def __init__(self, verbose=True):
+    def __init__(self, max_norm_sq=8, verbose=True):
         if verbose:
             print("Building E8 algebra...")
         self.e8 = E8Algebra()
 
         if verbose:
-            print("Building FIG...")
-        self.fig = FIGBuilder()
+            print(f"Building FIG (max_norm_sq={max_norm_sq})...")
+        self.fig = FIGBuilder(max_norm_sq=max_norm_sq)
 
         if verbose:
             print(f"Building segments ({self.fig.n_vertices} vertices)...")

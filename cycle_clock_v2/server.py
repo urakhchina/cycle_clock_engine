@@ -91,18 +91,44 @@ async def handle(websocket):
                 n = data.get('n', 1)
                 for _ in range(n):
                     step_data = game.step()
-                # Send the latest step (strip all_options for bandwidth)
+                # Send step with empire segment IDs for visualization
                 for cd in step_data['clocks']:
                     cd.pop('all_options', None)
                 state = game.get_state()
                 state['step_data'] = step_data
+                # Add empire segments for both clocks
+                c0v = game.clocks[0].vertex
+                c1v = game.clocks[1].vertex
+                emp0 = game.empire.segment_empire[c0v]
+                emp1 = game.empire.segment_empire[c1v]
+                overlap = emp0 & emp1
+                state['empires'] = {
+                    'c0_segments': list(emp0 - overlap),       # C0 only
+                    'c1_segments': list(emp1 - overlap),       # C1 only
+                    'overlap_segments': list(overlap),          # shared
+                    'c0_size': len(emp0),
+                    'c1_size': len(emp1),
+                    'overlap_size': len(overlap),
+                }
                 await websocket.send(json.dumps({'type': 'step', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'step_with_options':
-                # Send full probability distribution (for analysis panel)
                 step_data = game.step()
                 state = game.get_state()
                 state['step_data'] = step_data
+                c0v = game.clocks[0].vertex
+                c1v = game.clocks[1].vertex
+                emp0 = game.empire.segment_empire[c0v]
+                emp1 = game.empire.segment_empire[c1v]
+                overlap = emp0 & emp1
+                state['empires'] = {
+                    'c0_segments': list(emp0 - overlap),
+                    'c1_segments': list(emp1 - overlap),
+                    'overlap_segments': list(overlap),
+                    'c0_size': len(emp0),
+                    'c1_size': len(emp1),
+                    'overlap_size': len(overlap),
+                }
                 await websocket.send(json.dumps({'type': 'step_full', 'data': state}, cls=NpEncoder))
 
             elif cmd == 'set_isv':
@@ -147,4 +173,7 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServer stopped.")

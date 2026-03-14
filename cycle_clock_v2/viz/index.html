@@ -126,9 +126,12 @@ let vertexMeshes = [], segmentLines = null;
 let clock0Mesh, clock1Mesh;
 let playing = false;
 let animFrame = 0;
+let segColorArray = null;  // Float32Array for segment colors
+let segOpacityBase = 0.08; // dim default
 
 const CHI_PLUS = 0xf0a030;
 const CHI_MINUS = 0xa060f0;
+const OVERLAP_COLOR = 0xffffff;
 const FIG_SCALE = 1.0;
 
 // === WEBSOCKET ===
@@ -233,21 +236,23 @@ function onBoard(data) {
     vertexMeshes.push(m);
   });
 
-  // Segments as lines
+  // Segments as lines — colors updated dynamically to show empires
   const segPos = [];
-  const segColors = [];
-  const maxSegEmp = Math.max(...segEmpSizes);
+  const nSegs = data.segments.length;
+  segColorArray = new Float32Array(nSegs * 6);  // 2 vertices × RGB per segment
   data.segments.forEach(([a, b], si) => {
     const pa = positions[a], pb = positions[b];
     segPos.push(pa[0]*FIG_SCALE, pa[1]*FIG_SCALE, pa[2]*FIG_SCALE);
     segPos.push(pb[0]*FIG_SCALE, pb[1]*FIG_SCALE, pb[2]*FIG_SCALE);
-    const c = new THREE.Color().setHSL(0.58, 0.4, 0.12);
-    segColors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    // Default dim color
+    const base = 0.06;
+    segColorArray[si*6+0] = base; segColorArray[si*6+1] = base; segColorArray[si*6+2] = base + 0.04;
+    segColorArray[si*6+3] = base; segColorArray[si*6+4] = base; segColorArray[si*6+5] = base + 0.04;
   });
   const segGeo = new THREE.BufferGeometry();
   segGeo.setAttribute('position', new THREE.Float32BufferAttribute(segPos, 3));
-  segGeo.setAttribute('color', new THREE.Float32BufferAttribute(segColors, 3));
-  const segMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2 });
+  segGeo.setAttribute('color', new THREE.Float32BufferAttribute(segColorArray, 3));
+  const segMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
   segmentLines = new THREE.LineSegments(segGeo, segMat);
   scene.add(segmentLines);
 
@@ -257,9 +262,54 @@ function onBoard(data) {
   ws.send(JSON.stringify({cmd: 'get_state'}));
 }
 
+// === EMPIRE FIELD VISUALIZATION ===
+function updateEmpireField(empires) {
+  if (!segColorArray || !segmentLines || !empires) return;
+  const nSegs = segColorArray.length / 6;
+
+  // Reset all segments to dim
+  for (let i = 0; i < nSegs; i++) {
+    segColorArray[i*6+0] = 0.04; segColorArray[i*6+1] = 0.04; segColorArray[i*6+2] = 0.06;
+    segColorArray[i*6+3] = 0.04; segColorArray[i*6+4] = 0.04; segColorArray[i*6+5] = 0.06;
+  }
+
+  // C0 empire — gold
+  const c0col = new THREE.Color(CHI_PLUS);
+  (empires.c0_segments || []).forEach(si => {
+    if (si < nSegs) {
+      segColorArray[si*6+0] = c0col.r * 0.5; segColorArray[si*6+1] = c0col.g * 0.5; segColorArray[si*6+2] = c0col.b * 0.3;
+      segColorArray[si*6+3] = c0col.r * 0.5; segColorArray[si*6+4] = c0col.g * 0.5; segColorArray[si*6+5] = c0col.b * 0.3;
+    }
+  });
+
+  // C1 empire — purple
+  const c1col = new THREE.Color(CHI_MINUS);
+  (empires.c1_segments || []).forEach(si => {
+    if (si < nSegs) {
+      segColorArray[si*6+0] = c1col.r * 0.5; segColorArray[si*6+1] = c1col.g * 0.3; segColorArray[si*6+2] = c1col.b * 0.5;
+      segColorArray[si*6+3] = c1col.r * 0.5; segColorArray[si*6+4] = c1col.g * 0.3; segColorArray[si*6+5] = c1col.b * 0.5;
+    }
+  });
+
+  // Overlap — bright white
+  (empires.overlap_segments || []).forEach(si => {
+    if (si < nSegs) {
+      segColorArray[si*6+0] = 0.8; segColorArray[si*6+1] = 0.8; segColorArray[si*6+2] = 0.9;
+      segColorArray[si*6+3] = 0.8; segColorArray[si*6+4] = 0.8; segColorArray[si*6+5] = 0.9;
+    }
+  });
+
+  segmentLines.geometry.attributes.color.needsUpdate = true;
+}
+
 // === UPDATE FROM STEP ===
 function onStep(data) {
   onState(data);
+
+  // Update empire field visualization
+  if (data.empires) {
+    updateEmpireField(data.empires);
+  }
 
   // Update probability histogram
   if (data.step_data) {

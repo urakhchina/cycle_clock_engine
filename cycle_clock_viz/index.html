@@ -94,6 +94,7 @@ canvas { display: block; }
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 
 // === GLOBALS ===
 let scene, camera, renderer, controls;
@@ -120,14 +121,20 @@ const GEN_COLORS = [0xe74c3c, 0x2ecc71, 0x3498db];
 // === INIT ===
 async function init() {
   // Load data
-  const [boardResp, histResp, icosiResp] = await Promise.all([
-    fetch('../fig_gameboard.json'),
-    fetch('../game_history.json'),
-    fetch('../icosidodecahedron.json')
-  ]);
-  boardData = await boardResp.json();
-  historyData = await histResp.json();
-  icosiData = await icosiResp.json();
+  try {
+    const [boardResp, histResp, icosiResp] = await Promise.all([
+      fetch('../fig_gameboard.json'),
+      fetch('../game_history.json'),
+      fetch('../icosidodecahedron.json?v=3')
+    ]);
+    boardData = await boardResp.json();
+    historyData = await histResp.json();
+    icosiData = await icosiResp.json();
+    console.log('Data loaded:', boardData.n_vertices, 'verts,', icosiData.vertices.length, 'icosi verts');
+  } catch(e) {
+    console.error('FETCH ERROR:', e);
+    return;
+  }
 
   // Scene
   scene = new THREE.Scene();
@@ -181,8 +188,8 @@ function buildBoard() {
   const vertGeo = new THREE.SphereGeometry(0.02, 8, 8);
   positions.forEach((p, i) => {
     const empRatio = empSizes[i] / maxEmp;
-    const color = new THREE.Color().setHSL(0.58, 0.3, 0.15 + empRatio * 0.35);
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4 });
+    const color = new THREE.Color().setHSL(0.58, 0.2, 0.08 + empRatio * 0.12);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.15 });
     const mesh = new THREE.Mesh(vertGeo, mat);
     mesh.position.set(p[0], p[1], p[2]);
     mesh.userData = { idx: i, empSize: empSizes[i], baseOpacity: 0.4 };
@@ -255,20 +262,45 @@ function buildClockGroup(color) {
   // === ICOSIDODECAHEDRON: the Coxeter Hamiltonian circuit ===
   const icoGroup = new THREE.Group();
   icoGroup.name = 'coxeterPoly';
-  const icoScale = 0.8;
+  const icoScale = 1.2;
 
-  if (typeof icosiData !== 'undefined' && icosiData) {
-    // Wireframe edges (dim)
+  if (icosiData && icosiData.vertices) {
+    const sv = (i) => {
+      const v = icosiData.vertices[i];
+      return new THREE.Vector3(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale);
+    };
+
+    // === SOLID POLYHEDRON via ConvexGeometry ===
+    const points = icosiData.vertices.map(v =>
+      new THREE.Vector3(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale));
+
+    // Solid body — semi-transparent with chirality color
+    const solidGeo = new ConvexGeometry(points);
+    const solidMat = new THREE.MeshPhongMaterial({
+      color, emissive: color, emissiveIntensity: 0.15,
+      transparent: true, opacity: 0.12, side: THREE.DoubleSide,
+      shininess: 60
+    });
+    const solidMesh = new THREE.Mesh(solidGeo, solidMat);
+    solidMesh.name = 'solidBody';
+    icoGroup.add(solidMesh);
+
+    // Wireframe overlay on the solid — shows the edges clearly
+    const wireGeo = new ConvexGeometry(points);
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: 0xccddff, wireframe: true, transparent: true, opacity: 0.4
+    });
+    icoGroup.add(new THREE.Mesh(wireGeo, wireMat));
+
+    // Explicit edges (brighter, on top of wireframe)
     const edgePositions = [];
     icosiData.edges.forEach(([a, b]) => {
-      const va = icosiData.vertices[a];
-      const vb = icosiData.vertices[b];
-      edgePositions.push(va[0]*icoScale, va[1]*icoScale, va[2]*icoScale);
-      edgePositions.push(vb[0]*icoScale, vb[1]*icoScale, vb[2]*icoScale);
+      const va = sv(a), vb = sv(b);
+      edgePositions.push(va.x,va.y,va.z, vb.x,vb.y,vb.z);
     });
     const edgeGeo = new THREE.BufferGeometry();
     edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x5577aa, transparent: true, opacity: 0.5 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
     const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
     icoGroup.add(edgeLines);
 
@@ -282,13 +314,13 @@ function buildClockGroup(color) {
     const hamGeo = new THREE.BufferGeometry();
     hamGeo.setAttribute('position', new THREE.Float32BufferAttribute(hamPositions, 3));
     hamGeo.setDrawRange(0, 0);
-    const hamMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, linewidth: 2 });
+    const hamMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: false, linewidth: 2 });
     const hamLine = new THREE.Line(hamGeo, hamMat);
     hamLine.name = 'hamPath';
     icoGroup.add(hamLine);
 
     // 30 vertex spheres on the icosidodecahedron
-    const nodGeo = new THREE.SphereGeometry(0.035, 8, 8);
+    const nodGeo = new THREE.SphereGeometry(0.06, 8, 8);
     for (let k = 0; k < 30; k++) {
       const vi = icosiData.hamiltonian[k];
       const v = icosiData.vertices[vi];
@@ -303,7 +335,7 @@ function buildClockGroup(color) {
     }
 
     // Current position marker (bright)
-    const curGeo = new THREE.SphereGeometry(0.06, 12, 12);
+    const curGeo = new THREE.SphereGeometry(0.1, 12, 12);
     const curMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const curMarker = new THREE.Mesh(curGeo, curMat);
     curMarker.name = 'icoCurrent';
@@ -331,11 +363,22 @@ function buildClockGroup(color) {
 }
 
 function buildClocks() {
+  console.log('buildClocks called, icosiData:', icosiData ? 'yes' : 'no');
   clock1Mesh = buildClockGroup(CHI_PLUS);
   scene.add(clock1Mesh);
 
   clock2Mesh = buildClockGroup(CHI_MINUS);
   scene.add(clock2Mesh);
+
+  // Position them at initial locations
+  if (historyData && historyData.clocks) {
+    const h0 = historyData.clocks[0].history[0];
+    const h1 = historyData.clocks[1].history[0];
+    clock1Mesh.position.set(...h0.pos_3d);
+    clock2Mesh.position.set(...h1.pos_3d);
+    targetPos0.set(...h0.pos_3d);
+    targetPos1.set(...h1.pos_3d);
+  }
 }
 
 // Smooth interpolation state
@@ -349,27 +392,32 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
   const outer = group.getObjectByName('outer');
   const ring = group.getObjectByName('ring');
   const light = group.getObjectByName('light');
-  const phaseRing = group.getObjectByName('phaseRing');
   const flash = group.getObjectByName('closureFlash');
 
   // Chirality color
-  core.material.color.setHex(chiColor);
-  core.material.emissive.setHex(chiColor);
-  halo.material.color.setHex(chiColor);
-  outer.material.color.setHex(chiColor);
-  light.color.setHex(chiColor);
+  if (core) core.material.color.setHex(chiColor);
+  if (halo) halo.material.color.setHex(chiColor);
+  if (outer) outer.material.color.setHex(chiColor);
+  if (light) light.color.setHex(chiColor);
 
   // Generation ring color
-  ring.material.color.setHex(GEN_COLORS[genIdx]);
+  if (ring) ring.material.color.setHex(GEN_COLORS[genIdx]);
 
-  // Empire-based sizing: larger empire = larger orb
-  // Empire range ~64-232, map to scale 0.6-1.4
+  // Empire-based sizing
   const empScale = 0.6 + (empireSize / 287) * 0.8;
-  core.userData = core.userData || {};
-  core.userData.empScale = empScale;
+  if (core) { core.userData = core.userData || {}; core.userData.empScale = empScale; }
+
+  // Update solid body color
+  const icoPoly = group.getObjectByName('coxeterPoly');
+  if (icoPoly) {
+    const solidBody = icoPoly.getObjectByName('solidBody');
+    if (solidBody) {
+      solidBody.material.color.setHex(chiColor);
+      solidBody.material.emissive.setHex(chiColor);
+    }
+  }
 
   // Icosidodecahedron: update Hamiltonian path progress
-  const icoPoly = group.getObjectByName('coxeterPoly');
   if (icoPoly) {
     const hamPath = icoPoly.getObjectByName('hamPath');
     if (hamPath) {
@@ -400,7 +448,7 @@ function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize
     if (cur && icosiData) {
       const vi = icosiData.hamiltonian[coxeterPhase];
       const v = icosiData.vertices[vi];
-      const s = 0.8;
+      const s = 1.2;
       cur.position.set(v[0]*s, v[1]*s, v[2]*s);
     }
   }

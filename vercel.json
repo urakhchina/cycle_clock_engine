@@ -1,0 +1,7 @@
+{
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "routes": [
+    { "src": "/", "dest": "/cycle_clock_viz/index.html" }
+  ]
+}

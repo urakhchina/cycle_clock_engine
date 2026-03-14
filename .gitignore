@@ -1,2 +1,5 @@
 .DS_Store
 .ipynb_checkpoints/
+CCT-StandardModel/
+__pycache__/
+cycle_clock_executed.ipynb

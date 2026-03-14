@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cycle Clock — E8 Kinematic Spinors on the FIG</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a1a; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
+canvas { display: block; }
+
+#hud {
+  position: absolute; top: 20px; left: 20px;
+  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
+  border: 1px solid rgba(100,150,255,0.3); min-width: 320px;
+  font-size: 12px; line-height: 1.6;
+}
+#hud h1 { font-size: 16px; color: #88bbff; margin-bottom: 8px; }
+#hud .label { color: #888; }
+#hud .val { color: #fff; font-weight: bold; }
+#hud .chi-plus { color: #f0a030; }
+#hud .chi-minus { color: #a060f0; }
+#hud .gen0 { color: #e74c3c; }
+#hud .gen1 { color: #2ecc71; }
+#hud .gen2 { color: #3498db; }
+
+#controls {
+  position: absolute; bottom: 20px; left: 20px;
+  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
+  border: 1px solid rgba(100,150,255,0.3);
+  font-size: 12px;
+}
+#controls button {
+  background: rgba(100,150,255,0.3); color: #fff; border: 1px solid rgba(100,150,255,0.5);
+  padding: 6px 16px; margin: 4px; border-radius: 4px; cursor: pointer; font-family: inherit;
+}
+#controls button:hover { background: rgba(100,150,255,0.5); }
+#controls button.active { background: rgba(100,200,100,0.5); border-color: rgba(100,200,100,0.7); }
+
+#phase-ring {
+  position: absolute; top: 20px; right: 20px;
+  width: 180px; height: 180px;
+}
+
+#overlap-bar {
+  position: absolute; bottom: 20px; right: 20px;
+  background: rgba(10,10,30,0.85); padding: 16px; border-radius: 8px;
+  border: 1px solid rgba(100,150,255,0.3); width: 280px;
+}
+.bar-track { background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; margin: 4px 0; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <h1>CYCLE CLOCK</h1>
+  <div id="clock1-info"></div>
+  <hr style="border-color: rgba(100,150,255,0.2); margin: 8px 0;">
+  <div id="clock2-info"></div>
+  <hr style="border-color: rgba(100,150,255,0.2); margin: 8px 0;">
+  <div id="step-info"></div>
+</div>
+
+<div id="controls">
+  <button id="btn-play" onclick="togglePlay()">PLAY</button>
+  <button id="btn-step" onclick="stepOnce()">STEP</button>
+  <button id="btn-reset" onclick="resetSim()">RESET</button>
+  <span style="margin-left: 12px;">Speed:</span>
+  <input type="range" id="speed" min="1" max="20" value="3" style="vertical-align: middle;">
+  <br>
+  <span>PEL exponent:</span>
+  <input type="range" id="pel" min="1" max="40" value="10" style="vertical-align: middle;">
+  <span id="pel-val">10</span>
+  <br>
+  <button onclick="zoomIn()">+ Zoom In</button>
+  <button onclick="zoomOut()">− Zoom Out</button>
+</div>
+
+<canvas id="phase-ring"></canvas>
+
+<div id="overlap-bar">
+  <div><span class="label">Empire Overlap</span> <span id="overlap-val" class="val">0</span></div>
+  <div class="bar-track"><div class="bar-fill" id="overlap-fill" style="width:0%;background:#88bbff;"></div></div>
+  <div><span class="label">3D Distance</span> <span id="dist-val" class="val">0</span></div>
+  <div class="bar-track"><div class="bar-fill" id="dist-fill" style="width:0%;background:#f0a030;"></div></div>
+  <div><span class="label">Savings (C0)</span> <span id="sav1-val" class="val">0</span></div>
+  <div class="bar-track"><div class="bar-fill" id="sav1-fill" style="width:0%;background:#2ecc71;"></div></div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// === GLOBALS ===
+let scene, camera, renderer, controls;
+let boardData, historyData, icosiData;
+let vertexMeshes = [], edgeMeshes = [];
+let clock1Mesh, clock2Mesh;
+let clock1Trail = [], clock2Trail = [];
+let pathLine0 = null, pathLine1 = null;
+let startMarker0 = null, startMarker1 = null;
+let empireMeshes = [];
+let currentStep = 0;
+let playing = false;
+let animFrame = 0;
+
+// === COLORS ===
+const FIBER_COLORS = [
+  0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6,
+  0x1abc9c, 0xe67e22, 0x2980b9, 0xc0392b, 0x27ae60
+];
+const CHI_PLUS = 0xf0a030;
+const CHI_MINUS = 0xa060f0;
+const GEN_COLORS = [0xe74c3c, 0x2ecc71, 0x3498db];
+
+// === INIT ===
+async function init() {
+  // Load data
+  const [boardResp, histResp, icosiResp] = await Promise.all([
+    fetch('../fig_gameboard.json'),
+    fetch('../game_history.json'),
+    fetch('../icosidodecahedron.json')
+  ]);
+  boardData = await boardResp.json();
+  historyData = await histResp.json();
+  icosiData = await icosiResp.json();
+
+  // Scene
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.03);
+
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
+  camera.position.set(5, 4, 6);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  document.body.insertBefore(renderer.domElement, document.body.firstChild);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.enableZoom = false;  // disable scroll/pinch zoom
+  controls.minDistance = 1.5;
+  controls.maxDistance = 20;
+  controls.enablePan = true;
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x334466, 0.5));
+  const pointLight = new THREE.PointLight(0x88bbff, 2, 20);
+  pointLight.position.set(3, 5, 3);
+  scene.add(pointLight);
+
+  // Build the board
+  buildBoard();
+  buildClocks();
+  buildStartMarkers();
+  buildPathLines();
+  updateStep(0);
+  drawPhaseRing(0);
+
+  // Events
+  window.addEventListener('resize', onResize);
+  document.getElementById('pel').addEventListener('input', e => {
+    document.getElementById('pel-val').textContent = e.target.value;
+  });
+
+  animate();
+}
+
+function buildBoard() {
+  const positions = boardData.positions_3d;
+  const empSizes = boardData.empire_sizes;
+  const maxEmp = Math.max(...empSizes);
+
+  // Vertices as small spheres
+  const vertGeo = new THREE.SphereGeometry(0.02, 8, 8);
+  positions.forEach((p, i) => {
+    const empRatio = empSizes[i] / maxEmp;
+    const color = new THREE.Color().setHSL(0.58, 0.3, 0.15 + empRatio * 0.35);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4 });
+    const mesh = new THREE.Mesh(vertGeo, mat);
+    mesh.position.set(p[0], p[1], p[2]);
+    mesh.userData = { idx: i, empSize: empSizes[i], baseOpacity: 0.4 };
+    scene.add(mesh);
+    vertexMeshes.push(mesh);
+  });
+
+  // Edges as thin lines
+  const edgeGeo = new THREE.BufferGeometry();
+  const edgePositions = [];
+  const edgeColors = [];
+  const maxSav = Math.max(...boardData.edge_savings);
+
+  boardData.edges.forEach((e, idx) => {
+    const [i, j] = e;
+    const s = boardData.edge_savings[idx] / maxSav;
+    edgePositions.push(...positions[i], ...positions[j]);
+    const c = new THREE.Color().setHSL(0.58, 0.5, s * 0.3);
+    edgeColors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  });
+
+  edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+  edgeGeo.setAttribute('color', new THREE.Float32BufferAttribute(edgeColors, 3));
+  const edgeMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.12 });
+  const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
+  scene.add(edgeLines);
+}
+
+function buildClockGroup(color) {
+  const group = new THREE.Group();
+
+  // No orb — the icosidodecahedron IS the particle.
+  // Just a small core dot at center for position reference
+  const coreGeo = new THREE.SphereGeometry(0.04, 12, 12);
+  const coreMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.9
+  });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  core.name = 'core';
+  group.add(core);
+
+  // Glow halo emanates from the icosidodecahedron
+  const haloGeo = new THREE.SphereGeometry(1.0, 16, 16);
+  const haloMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.06
+  });
+  const halo = new THREE.Mesh(haloGeo, haloMat);
+  halo.name = 'halo';
+  group.add(halo);
+
+  // Outer glow
+  const outerGeo = new THREE.SphereGeometry(1.4, 16, 16);
+  const outerMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.025
+  });
+  const outer = new THREE.Mesh(outerGeo, outerMat);
+  outer.name = 'outer';
+  group.add(outer);
+
+  // Generation ring around the icosidodecahedron
+  const ringGeo = new THREE.TorusGeometry(0.9, 0.015, 8, 48);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: GEN_COLORS[0], transparent: true, opacity: 0.6
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.name = 'ring';
+  group.add(ring);
+
+  // === ICOSIDODECAHEDRON: the Coxeter Hamiltonian circuit ===
+  const icoGroup = new THREE.Group();
+  icoGroup.name = 'coxeterPoly';
+  const icoScale = 0.8;
+
+  if (typeof icosiData !== 'undefined' && icosiData) {
+    // Wireframe edges (dim)
+    const edgePositions = [];
+    icosiData.edges.forEach(([a, b]) => {
+      const va = icosiData.vertices[a];
+      const vb = icosiData.vertices[b];
+      edgePositions.push(va[0]*icoScale, va[1]*icoScale, va[2]*icoScale);
+      edgePositions.push(vb[0]*icoScale, vb[1]*icoScale, vb[2]*icoScale);
+    });
+    const edgeGeo = new THREE.BufferGeometry();
+    edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x5577aa, transparent: true, opacity: 0.5 });
+    const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
+    icoGroup.add(edgeLines);
+
+    // Hamiltonian path (will be progressively revealed)
+    const hamPositions = [];
+    for (let k = 0; k <= 30; k++) {
+      const vi = icosiData.hamiltonian[k % 30];
+      const v = icosiData.vertices[vi];
+      hamPositions.push(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale);
+    }
+    const hamGeo = new THREE.BufferGeometry();
+    hamGeo.setAttribute('position', new THREE.Float32BufferAttribute(hamPositions, 3));
+    hamGeo.setDrawRange(0, 0);
+    const hamMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, linewidth: 2 });
+    const hamLine = new THREE.Line(hamGeo, hamMat);
+    hamLine.name = 'hamPath';
+    icoGroup.add(hamLine);
+
+    // 30 vertex spheres on the icosidodecahedron
+    const nodGeo = new THREE.SphereGeometry(0.035, 8, 8);
+    for (let k = 0; k < 30; k++) {
+      const vi = icosiData.hamiltonian[k];
+      const v = icosiData.vertices[vi];
+      const nodMat = new THREE.MeshBasicMaterial({
+        color: k < 15 ? CHI_PLUS : CHI_MINUS,
+        transparent: true, opacity: 0.2
+      });
+      const nod = new THREE.Mesh(nodGeo, nodMat);
+      nod.position.set(v[0]*icoScale, v[1]*icoScale, v[2]*icoScale);
+      nod.name = `icoNode_${k}`;
+      icoGroup.add(nod);
+    }
+
+    // Current position marker (bright)
+    const curGeo = new THREE.SphereGeometry(0.06, 12, 12);
+    const curMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const curMarker = new THREE.Mesh(curGeo, curMat);
+    curMarker.name = 'icoCurrent';
+    icoGroup.add(curMarker);
+  }
+  // The icosidodecahedron IS the clock — centered on the particle position
+  group.add(icoGroup);
+
+  // Closure flash ring
+  const flashGeo = new THREE.TorusGeometry(1.0, 0.03, 8, 32);
+  const flashMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.0
+  });
+  const flash = new THREE.Mesh(flashGeo, flashMat);
+  flash.rotation.x = Math.PI / 2;
+  flash.name = 'closureFlash';
+  group.add(flash);
+
+  // Point light for local illumination
+  const light = new THREE.PointLight(color, 1.5, 3);
+  light.name = 'light';
+  group.add(light);
+
+  return group;
+}
+
+function buildClocks() {
+  clock1Mesh = buildClockGroup(CHI_PLUS);
+  scene.add(clock1Mesh);
+
+  clock2Mesh = buildClockGroup(CHI_MINUS);
+  scene.add(clock2Mesh);
+}
+
+// Smooth interpolation state
+let targetPos0 = new THREE.Vector3();
+let targetPos1 = new THREE.Vector3();
+let lerpSpeed = 0.08;
+
+function updateClockAppearance(group, chiColor, genIdx, coxeterPhase, empireSize, step) {
+  const core = group.getObjectByName('core');
+  const halo = group.getObjectByName('halo');
+  const outer = group.getObjectByName('outer');
+  const ring = group.getObjectByName('ring');
+  const light = group.getObjectByName('light');
+  const phaseRing = group.getObjectByName('phaseRing');
+  const flash = group.getObjectByName('closureFlash');
+
+  // Chirality color
+  core.material.color.setHex(chiColor);
+  core.material.emissive.setHex(chiColor);
+  halo.material.color.setHex(chiColor);
+  outer.material.color.setHex(chiColor);
+  light.color.setHex(chiColor);
+
+  // Generation ring color
+  ring.material.color.setHex(GEN_COLORS[genIdx]);
+
+  // Empire-based sizing: larger empire = larger orb
+  // Empire range ~64-232, map to scale 0.6-1.4
+  const empScale = 0.6 + (empireSize / 287) * 0.8;
+  core.userData = core.userData || {};
+  core.userData.empScale = empScale;
+
+  // Icosidodecahedron: update Hamiltonian path progress
+  const icoPoly = group.getObjectByName('coxeterPoly');
+  if (icoPoly) {
+    const hamPath = icoPoly.getObjectByName('hamPath');
+    if (hamPath) {
+      // Show path up to current phase
+      const drawCount = coxeterPhase + 1 + (coxeterPhase === 0 && step > 0 ? 30 : 0);
+      hamPath.geometry.setDrawRange(0, Math.min(drawCount, 31));
+      // Color: gold for first half, purple for second
+      hamPath.material.color.setHex(coxeterPhase < 15 ? CHI_PLUS : CHI_MINUS);
+    }
+
+    // Light up visited nodes
+    for (let k = 0; k < 30; k++) {
+      const nod = icoPoly.getObjectByName(`icoNode_${k}`);
+      if (!nod) continue;
+      const visited = k <= coxeterPhase || (coxeterPhase === 0 && step > 0);
+      nod.material.opacity = visited ? 0.85 : 0.12;
+      nod.scale.setScalar(visited ? 1.5 : 0.8);
+      if (k === coxeterPhase) {
+        nod.material.color.setHex(0xffffff);
+        nod.scale.setScalar(2.5);
+      } else {
+        nod.material.color.setHex(k < 15 ? CHI_PLUS : CHI_MINUS);
+      }
+    }
+
+    // Current position marker
+    const cur = icoPoly.getObjectByName('icoCurrent');
+    if (cur && icosiData) {
+      const vi = icosiData.hamiltonian[coxeterPhase];
+      const v = icosiData.vertices[vi];
+      const s = 0.8;
+      cur.position.set(v[0]*s, v[1]*s, v[2]*s);
+    }
+  }
+
+  // Closure flash: bright white ring when phase returns to 0
+  if (flash) {
+    if (coxeterPhase === 0 && step > 0) {
+      flash.material.opacity = 1.0;
+      flash.scale.setScalar(2.0);
+    } else {
+      // Fade out
+      flash.material.opacity *= 0.9;
+      flash.scale.setScalar(1.0 + flash.material.opacity);
+    }
+  }
+}
+
+function updateStep(step) {
+  if (!historyData || !historyData.clocks) return;
+  currentStep = step;
+
+  const c0 = historyData.clocks[0].history[step];
+  const c1 = historyData.clocks[1].history[step];
+
+  // Set interpolation targets (smooth movement)
+  targetPos0.set(...c0.pos_3d);
+  targetPos1.set(...c1.pos_3d);
+
+  // Update colors, phase dots, empire sizing
+  const chi0 = c0.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+  const chi1 = c1.chirality > 0 ? CHI_PLUS : CHI_MINUS;
+  updateClockAppearance(clock1Mesh, chi0, c0.generation, c0.coxeter_phase, c0.empire_size, step);
+  updateClockAppearance(clock2Mesh, chi1, c1.generation, c1.coxeter_phase, c1.empire_size, step);
+
+  // Highlight empires
+  highlightEmpire(c0.vertex, c1.vertex);
+
+  // (Trails replaced by persistent path lines)
+
+  // Update HUD
+  updateHUD(c0, c1, step);
+
+  // Update bars
+  if (step > 0 && historyData.step_log[step-1]) {
+    const log = historyData.step_log[step-1];
+    if (log.records.length > 2) {
+      const inter = log.records[log.records.length - 1];
+      const overlapPct = (inter.empire_overlap / 287 * 100).toFixed(0);
+      document.getElementById('overlap-val').textContent = inter.empire_overlap;
+      document.getElementById('overlap-fill').style.width = overlapPct + '%';
+      document.getElementById('dist-val').textContent = inter.distance_3d.toFixed(2);
+      document.getElementById('dist-fill').style.width = Math.min(inter.distance_3d/6*100, 100) + '%';
+    }
+    if (log.records[0]) {
+      const sav = log.records[0].savings || 0;
+      document.getElementById('sav1-val').textContent = sav;
+      document.getElementById('sav1-fill').style.width = (sav/150*100) + '%';
+    }
+  }
+
+  // Update path and start markers
+  updatePathVisibility(step);
+
+  drawPhaseRing(c0.coxeter_phase);
+}
+
+function highlightEmpire(v0, v1) {
+  // Reset all vertices
+  vertexMeshes.forEach(m => {
+    m.material.opacity = m.userData.baseOpacity;
+    m.scale.setScalar(1);
+  });
+
+  // Highlight empire members
+  const emp0 = boardData.empire_members?.[String(v0)] || [];
+  const emp1 = boardData.empire_members?.[String(v1)] || [];
+  const set0 = new Set(emp0);
+  const set1 = new Set(emp1);
+
+  emp0.forEach(i => {
+    if (vertexMeshes[i]) {
+      vertexMeshes[i].material.opacity = 0.7;
+      vertexMeshes[i].material.color.setHex(set1.has(i) ? 0xffffff : CHI_PLUS);
+      vertexMeshes[i].scale.setScalar(set1.has(i) ? 2.5 : 1.5);
+    }
+  });
+  emp1.forEach(i => {
+    if (vertexMeshes[i] && !set0.has(i)) {
+      vertexMeshes[i].material.opacity = 0.7;
+      vertexMeshes[i].material.color.setHex(CHI_MINUS);
+      vertexMeshes[i].scale.setScalar(1.5);
+    }
+  });
+}
+
+function updateTrail(trail, pos, color, id) {
+  const geo = new THREE.SphereGeometry(0.03, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(...pos);
+  scene.add(m);
+  trail.push(m);
+
+  // Fade old trail points
+  trail.forEach((t, i) => {
+    const age = trail.length - i;
+    t.material.opacity = Math.max(0.05, 0.6 - age * 0.02);
+    t.scale.setScalar(Math.max(0.3, 1 - age * 0.03));
+  });
+
+  // Remove very old
+  while (trail.length > 50) {
+    const old = trail.shift();
+    scene.remove(old);
+    old.geometry.dispose();
+    old.material.dispose();
+  }
+}
+
+function updateHUD(c0, c1, step) {
+  const chiClass = c => c.chirality > 0 ? 'chi-plus' : 'chi-minus';
+  const chiSymbol = c => c.chirality > 0 ? '+' : '−';
+  const genClass = c => 'gen' + c.generation;
+
+  document.getElementById('clock1-info').innerHTML = `
+    <span class="${chiClass(c0)}">■</span> Clock 0 &nbsp;
+    v${c0.vertex} &nbsp;
+    χ=<span class="${chiClass(c0)}">${chiSymbol(c0)}</span> &nbsp;
+    L<span class="${genClass(c0)}">${c0.generation}</span> &nbsp;
+    φ=${c0.coxeter_phase} &nbsp;
+    emp=${c0.empire_size}
+  `;
+  document.getElementById('clock2-info').innerHTML = `
+    <span class="${chiClass(c1)}">■</span> Clock 1 &nbsp;
+    v${c1.vertex} &nbsp;
+    χ=<span class="${chiClass(c1)}">${chiSymbol(c1)}</span> &nbsp;
+    L<span class="${genClass(c1)}">${c1.generation}</span> &nbsp;
+    φ=${c1.coxeter_phase} &nbsp;
+    emp=${c1.empire_size}
+  `;
+  const phaseReturn = c0.coxeter_phase === 0 && step > 0;
+  const cycleNum = Math.floor(step / 30);
+
+  document.getElementById('step-info').innerHTML = `
+    <span class="label">Step</span> <span class="val">${step}</span> / ${historyData.clocks[0].history.length - 1}
+    &nbsp; h=30=2×3×5<br>
+    <span class="label">Coxeter cycle:</span> ${phaseReturn ? '<span style="color:#2ecc71;">⟳ CYCLE ' + cycleNum + ' COMPLETE</span>' : `φ=${c0.coxeter_phase}/30 (cycle ${cycleNum})`}
+  `;
+}
+
+function drawPhaseRing(phase) {
+  const canvas = document.getElementById('phase-ring');
+  const ctx = canvas.getContext('2d');
+  const w = 180, h = 180;
+  canvas.width = w; canvas.height = h;
+  const cx = w/2, cy = h/2, r = 70;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw 30 phase marks
+  for (let k = 0; k < 30; k++) {
+    const angle = (k / 30) * Math.PI * 2 - Math.PI/2;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    const isCurrent = k === phase;
+
+    ctx.beginPath();
+    ctx.arc(x, y, isCurrent ? 6 : 3, 0, Math.PI * 2);
+    if (k < 15) {
+      ctx.fillStyle = isCurrent ? '#f0a030' : 'rgba(240,160,48,0.3)';
+    } else {
+      ctx.fillStyle = isCurrent ? '#a060f0' : 'rgba(160,96,240,0.3)';
+    }
+    ctx.fill();
+
+    // C^15 boundary line
+    if (k === 0 || k === 15) {
+      const x2 = cx + (r+15) * Math.cos(angle);
+      const y2 = cy + (r+15) * Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(cx + (r-10)*Math.cos(angle), cy + (r-10)*Math.sin(angle));
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = 'rgba(255,100,100,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Label
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Coxeter Phase', cx, cy - 8);
+  ctx.fillText(`φ = ${phase}`, cx, cy + 5);
+  ctx.fillText('h = 30', cx, cy + 18);
+}
+
+function buildStartMarkers() {
+  // No spatial start markers — the internal phase cycle is what matters
+}
+
+function buildPathLines() {
+  // Pre-build the full path geometry for both clocks
+  // We'll reveal segments progressively as steps advance
+
+  const makePathLine = (clockIdx, color) => {
+    const history = historyData.clocks[clockIdx].history;
+    const positions = [];
+    const colors = [];
+    for (let i = 0; i < history.length; i++) {
+      positions.push(...history[i].pos_3d);
+      // Color by chirality at that step
+      const c = new THREE.Color(history[i].chirality > 0 ? CHI_PLUS : CHI_MINUS);
+      colors.push(c.r, c.g, c.b);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    // Start with nothing visible
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.7, linewidth: 2 });
+    return new THREE.Line(geo, mat);
+  };
+
+  pathLine0 = makePathLine(0, CHI_PLUS);
+  pathLine1 = makePathLine(1, CHI_MINUS);
+  scene.add(pathLine0);
+  scene.add(pathLine1);
+}
+
+function updatePathVisibility(step) {
+  // Show path up to current step
+  if (pathLine0) pathLine0.geometry.setDrawRange(0, step + 1);
+  if (pathLine1) pathLine1.geometry.setDrawRange(0, step + 1);
+
+}
+
+// === ANIMATION ===
+function animate() {
+  requestAnimationFrame(animate);
+  animFrame++;
+  controls.update();
+
+  // Auto-play (much slower: speed 1 = every 120 frames, speed 20 = every 10 frames)
+  const speedVal = parseInt(document.getElementById('speed').value);
+  const interval = Math.max(10, 130 - speedVal * 6);
+  if (playing && animFrame % interval === 0) {
+    stepOnce();
+  }
+
+  // Smooth position interpolation
+  if (clock1Mesh && clock2Mesh) {
+    clock1Mesh.position.lerp(targetPos0, lerpSpeed);
+    clock2Mesh.position.lerp(targetPos1, lerpSpeed);
+
+    // Empire-based size with gentle breathing
+    const breath = 1 + 0.08 * Math.sin(animFrame * 0.04);
+    const haloBr = 1 + 0.15 * Math.sin(animFrame * 0.03);
+    [clock1Mesh, clock2Mesh].forEach(group => {
+      const core = group.getObjectByName('core');
+      const halo = group.getObjectByName('halo');
+      const outer = group.getObjectByName('outer');
+      const empS = (core && core.userData && core.userData.empScale) || 1.0;
+      if (core) core.scale.setScalar(empS * breath);
+      if (halo) halo.scale.setScalar(empS * haloBr);
+      if (outer) outer.scale.setScalar(empS * haloBr * 1.1);
+
+      // Fade closure flash over time
+      const flash = group.getObjectByName('closureFlash');
+      if (flash && flash.material.opacity > 0.01) {
+        flash.material.opacity *= 0.97;
+        flash.scale.setScalar(1.0 + (1 - flash.material.opacity) * 1.5);
+      }
+    });
+
+    // Spin the generation rings
+    const ring1 = clock1Mesh.getObjectByName('ring');
+    const ring2 = clock2Mesh.getObjectByName('ring');
+    if (ring1) ring1.rotation.z += 0.015;
+    if (ring2) ring2.rotation.z -= 0.015;
+
+    // Slowly tumble the icosidodecahedra
+    const ico1 = clock1Mesh.getObjectByName('coxeterPoly');
+    const ico2 = clock2Mesh.getObjectByName('coxeterPoly');
+    if (ico1) { ico1.rotation.y += 0.003; ico1.rotation.x += 0.001; }
+    if (ico2) { ico2.rotation.y -= 0.003; ico2.rotation.x += 0.001; }
+  }
+
+  renderer.render(scene, camera);
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// === CONTROLS ===
+window.togglePlay = function() {
+  playing = !playing;
+  document.getElementById('btn-play').textContent = playing ? 'PAUSE' : 'PLAY';
+  document.getElementById('btn-play').classList.toggle('active', playing);
+};
+
+window.stepOnce = function() {
+  const maxStep = historyData.clocks[0].history.length - 1;
+  if (currentStep < maxStep) {
+    updateStep(currentStep + 1);
+  } else {
+    playing = false;
+    document.getElementById('btn-play').textContent = 'PLAY';
+    document.getElementById('btn-play').classList.remove('active');
+  }
+};
+
+window.zoomIn = function() {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  camera.position.addScaledVector(dir, 0.8);
+  const d = camera.position.length();
+  if (d < 1.5) camera.position.setLength(1.5);
+};
+
+window.zoomOut = function() {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  camera.position.addScaledVector(dir, -0.8);
+  const d = camera.position.length();
+  if (d > 20) camera.position.setLength(20);
+};
+
+window.resetSim = function() {
+  playing = false;
+  document.getElementById('btn-play').textContent = 'PLAY';
+  document.getElementById('btn-play').classList.remove('active');
+  // Reset path visibility
+  if (pathLine0) pathLine0.geometry.setDrawRange(0, 0);
+  if (pathLine1) pathLine1.geometry.setDrawRange(0, 0);
+  updateStep(0);
+};
+
+// === START ===
+init();
+</script>
+</body>
+</html>

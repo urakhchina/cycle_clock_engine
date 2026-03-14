@@ -10,3 +10,9 @@ cycle_clock_executed.ipynb
 *.wl
 __pycache__/
 cycle_clock_executed.ipynb
+my_*.ipynb
+compute_perfect_20g.py
+export_data.py
+perfect_20g.json
+paper_v5.tex
+radial_dual_*.tex

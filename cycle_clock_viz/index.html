@@ -117,10 +117,10 @@ async function init() {
   // Load data
   try {
     const [boardResp, histResp, icosiResp, geomResp] = await Promise.all([
-      fetch('../fig_gameboard.json?v=2'),
-      fetch('../game_history.json?v=2'),
-      fetch('../icosidodecahedron.json?v=5'),
-      fetch('../clock_geometry.json?v=3')
+      fetch('../fig_gameboard.json?v=4'),
+      fetch('../game_history.json?v=3'),
+      fetch('../icosidodecahedron.json?v=6'),
+      fetch('../clock_geometry.json?v=4')
     ]);
     boardData = await boardResp.json();
     historyData = await histResp.json();
@@ -182,11 +182,11 @@ function buildBoard() {
   const maxEmp = Math.max(...empSizes);
 
   // Vertices as small spheres
-  const vertGeo = new THREE.SphereGeometry(0.04, 8, 8);
+  const vertGeo = new THREE.SphereGeometry(0.02, 8, 8);
   positions.forEach((p, i) => {
     const empRatio = empSizes[i] / maxEmp;
-    const color = new THREE.Color().setHSL(0.58, 0.2, 0.08 + empRatio * 0.12);
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45 });
+    const color = new THREE.Color().setHSL(0.58, 0.3, 0.15 + empRatio * 0.35);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4 });
     const mesh = new THREE.Mesh(vertGeo, mat);
     mesh.position.set(p[0] * 1.4 - 4.3, p[1] * 1.4 + 1.5, p[2] * 1.4);  // scale up FIG, shift up
     mesh.userData = { idx: i, empSize: empSizes[i], baseOpacity: 0.4 };
@@ -621,8 +621,8 @@ function updateStep(step) {
   const c1 = historyData.clocks[1].history[step];
 
   // Set interpolation targets (smooth movement, with FIG offset)
-  targetPos0.set(c0.pos_3d[0]*1.6 - 3.3, c0.pos_3d[1]*1.6 + 1.5, c0.pos_3d[2]*1.4);
-  targetPos1.set(c1.pos_3d[0]*1.6 - 3.3, c1.pos_3d[1]*1.6 + 1.5, c1.pos_3d[2]*1.4);
+  targetPos0.set(c0.pos_3d[0]*1.4 - 4.3, c0.pos_3d[1]*1.4 + 1.5, c0.pos_3d[2]*1.4);
+  targetPos1.set(c1.pos_3d[0]*1.4 - 4.3, c1.pos_3d[1]*1.4 + 1.5, c1.pos_3d[2]*1.4);
 
   // Update colors, phase dots, empire sizing, A2 fiber, active root
   const chi0 = c0.chirality > 0 ? CHI_PLUS : CHI_MINUS;
@@ -668,13 +668,17 @@ function updateStep(step) {
 }
 
 function highlightEmpire(v0, v1) {
-  // Reset all vertices
+  // Reset all vertices to original color and opacity
+  const maxEmp = boardData ? Math.max(...boardData.empire_sizes) : 1;
   vertexMeshes.forEach(m => {
-    m.material.opacity = m.userData.baseOpacity || 0.15;
+    const empRatio = (m.userData.empSize || 0) / maxEmp;
+    m.material.color.setHSL(0.58, 0.3, 0.15 + empRatio * 0.35);
+    m.material.opacity = m.userData.baseOpacity || 0.4;
     m.scale.setScalar(1);
   });
 
-  // Highlight empire members
+  // Highlight empire members by BRIGHTNESS only (no color change)
+  // Keeps the FIG's original gradient, shows empires as glow
   const emp0 = boardData.empire_members?.[String(v0)] || [];
   const emp1 = boardData.empire_members?.[String(v1)] || [];
   const set0 = new Set(emp0);
@@ -683,15 +687,17 @@ function highlightEmpire(v0, v1) {
   emp0.forEach(i => {
     if (vertexMeshes[i]) {
       vertexMeshes[i].material.opacity = 0.7;
-      vertexMeshes[i].material.color.setHex(set1.has(i) ? 0xffffff : CHI_PLUS);
       vertexMeshes[i].scale.setScalar(set1.has(i) ? 2.5 : 1.5);
+      // Overlap: brighten to white
+      if (set1.has(i)) {
+        vertexMeshes[i].material.color.setHex(0xffffff);
+      }
     }
   });
   emp1.forEach(i => {
     if (vertexMeshes[i] && !set0.has(i)) {
-      vertexMeshes[i].material.opacity = 0.7;
-      vertexMeshes[i].material.color.setHex(CHI_MINUS);
-      vertexMeshes[i].scale.setScalar(1.5);
+      vertexMeshes[i].material.opacity = 0.6;
+      vertexMeshes[i].scale.setScalar(1.3);
     }
   });
 }

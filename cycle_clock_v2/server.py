@@ -111,6 +111,10 @@ def init_helix_game(preset_name=None, config=None, empire_radius=8):
 async def handle(websocket):
     global mode, helix_game
     print(f"Client connected")
+
+    # Wait for game to be initialized if server just started
+    while game is None:
+        await asyncio.sleep(0.5)
     try:
         async for message in websocket:
             data = json.loads(message)
@@ -253,16 +257,30 @@ async def handle(websocket):
 
 async def main():
     import os
-
-    init_game()
+    from http import HTTPStatus
 
     # Railway sets PORT env var; locally use defaults
     ws_port = int(os.environ.get('PORT', 8765))
-    ws_host = '0.0.0.0'  # bind to all interfaces for Railway
+    ws_host = '0.0.0.0'
     http_port = int(os.environ.get('HTTP_PORT', 8766))
     is_railway = 'PORT' in os.environ or 'RAILWAY_ENVIRONMENT' in os.environ
 
-    # Start HTTP server for static files (local dev only, Vercel serves in prod)
+    # Health check handler — responds to plain HTTP so Railway's probe passes
+    async def process_request(path, headers):
+        if path == "/" or path == "/health":
+            return HTTPStatus.OK, [], b"OK\n"
+
+    # Start WebSocket server FIRST so health check passes while game builds
+    print(f"WebSocket server starting on {ws_host}:{ws_port}...")
+    server = await websockets.serve(
+        handle, ws_host, ws_port,
+        process_request=process_request)
+    print(f"WebSocket server listening (health check ready)")
+
+    # Now build the game (takes ~15s)
+    init_game()
+
+    # Start HTTP server for static files (local dev only)
     if not is_railway:
         import http.server, threading
         viz_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'viz')
@@ -277,19 +295,9 @@ async def main():
         httpd = http.server.HTTPServer(('localhost', http_port), NoCacheHandler)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         print(f"Static server: http://localhost:{http_port}")
-
-    print(f"WebSocket server: ws://{ws_host}:{ws_port}")
-    if not is_railway:
         print(f"\nOpen http://localhost:{http_port} in your browser\n")
 
-    # Health check handler for Railway (responds to plain HTTP on the WS port)
-    async def health_check(path, request_headers):
-        if path == "/" or path == "/health":
-            return (200, [("Content-Type", "text/plain")], b"OK\n")
-
-    async with websockets.serve(handle, ws_host, ws_port,
-                                 process_request=health_check if is_railway else None):
-        await asyncio.Future()
+    await asyncio.Future()
 
 
 if __name__ == '__main__':

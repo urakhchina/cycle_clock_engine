@@ -282,7 +282,13 @@ async def main():
     if not is_railway:
         print(f"\nOpen http://localhost:{http_port} in your browser\n")
 
-    async with websockets.serve(handle, ws_host, ws_port):
+    # Health check handler for Railway (responds to plain HTTP on the WS port)
+    async def health_check(path, request_headers):
+        if path == "/" or path == "/health":
+            return (200, [("Content-Type", "text/plain")], b"OK\n")
+
+    async with websockets.serve(handle, ws_host, ws_port,
+                                 process_request=health_check if is_railway else None):
         await asyncio.Future()
 
 

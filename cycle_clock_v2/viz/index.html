@@ -392,6 +392,7 @@ function blendSegmentColors() {
 // ==============================================================
 
 let helixDistLine = null; // line between emperors
+let helixHitGroup = null; // empire hit markers
 let zoomMultiplier = 1.0; // user zoom adjustment
 
 function clearHelixObjects() {
@@ -401,6 +402,7 @@ function clearHelixObjects() {
   if (helixPath1) { scene.remove(helixPath1); helixPath1 = null; }
   if (helixScatterGroup) { scene.remove(helixScatterGroup); helixScatterGroup = null; }
   if (helixDistLine) { scene.remove(helixDistLine); helixDistLine = null; }
+  if (helixHitGroup) { scene.remove(helixHitGroup); helixHitGroup = null; }
   trail0Points = [];
   trail1Points = [];
 }
@@ -653,6 +655,42 @@ function onHelixStep(data) {
     if (helixPath1) scene.add(helixPath1);
   }
 
+  // Draw empire hit markers — bright white spheres where helix vertices
+  // overlap with empire in relative coordinates (the interference points)
+  if (helixHitGroup) { scene.remove(helixHitGroup); helixHitGroup = null; }
+  helixHitGroup = new THREE.Group();
+
+  const hitGeo = new THREE.SphereGeometry(0.08, 10, 10);
+  const hitColors = [0xffee66, 0xddaaff]; // bright gold / bright purple for each emperor
+
+  emps.forEach((ed, ei) => {
+    const hits = ed.hit_positions || [];
+    if (hits.length === 0) return;
+
+    const hitMat = new THREE.MeshBasicMaterial({
+      color: hitColors[ei], transparent: true, opacity: 0.95
+    });
+
+    hits.forEach(p => {
+      const marker = new THREE.Mesh(hitGeo, hitMat);
+      marker.position.set(p[0]*HELIX_SCALE, p[1]*HELIX_SCALE, p[2]*HELIX_SCALE);
+      helixHitGroup.add(marker);
+    });
+
+    // Draw lines connecting hit points to show interference pattern
+    if (hits.length >= 2) {
+      const linePoints = hits.map(p =>
+        new THREE.Vector3(p[0]*HELIX_SCALE, p[1]*HELIX_SCALE, p[2]*HELIX_SCALE));
+      const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.4
+      });
+      helixHitGroup.add(new THREE.Line(lineGeo, lineMat));
+    }
+  });
+
+  if (helixHitGroup.children.length > 0) scene.add(helixHitGroup);
+
   // Update HUD
   const step = data.step || stepData.step || '?';
   const e0 = emps[0] || {};
@@ -853,6 +891,12 @@ function animate() {
         if (c.material && c.material.opacity > 0.15) c.material.opacity -= 0.003;
       });
     });
+    // Fade hit markers
+    if (helixHitGroup) {
+      helixHitGroup.children.forEach(c => {
+        if (c.material && c.material.opacity > 0.1) c.material.opacity -= 0.008;
+      });
+    }
     // Keep view centered on emperors every frame
     centerViewOnEmperors();
   }

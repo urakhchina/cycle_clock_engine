@@ -167,24 +167,31 @@ class HelixGame:
         self.emperors.append(emperor)
         return emperor
 
-    def _compute_savings(self, segment, other_position):
+    def _compute_savings(self, segment, other_position, return_hits=False):
         """Count empire overlaps for a translated helix segment.
 
         Translate segment by -other_position, flatten vertices,
         deduplicate, count how many land on empire positions.
+
+        If return_hits=True, also returns list of indices into `segment`
+        that produced hits (for visualization).
         """
         translated = segment - other_position
         rounded = np.round(translated, 8)
 
-        # Deduplicate
         seen = set()
         hits = 0
-        for pt in rounded:
+        hit_indices = []
+        for idx, pt in enumerate(rounded):
             key = tuple(pt)
             if key not in seen:
                 seen.add(key)
                 if key in self.empire_lookup:
                     hits += 1
+                    if return_hits:
+                        hit_indices.append(idx)
+        if return_hits:
+            return hits, hit_indices
         return hits
 
     def step(self):
@@ -246,6 +253,15 @@ class HelixGame:
             chosen_segment = translated_segments[chosen_idx]
             chosen_savings = savings_list[chosen_idx]
 
+            # Compute which vertices of the chosen segment hit empire points
+            hit_indices = []
+            if other_pos is not None:
+                _, hit_indices = self._compute_savings(
+                    chosen_segment, other_pos, return_hits=True)
+
+            # The hit vertices in world coordinates (for viz)
+            hit_positions = chosen_segment[hit_indices].tolist() if hit_indices else []
+
             # Move to endpoint of chosen segment
             old_pos = emperor.position.copy()
             emperor.position = chosen_segment[-1].copy()
@@ -263,6 +279,7 @@ class HelixGame:
                 'best_savings': int(savings_arr.max()),
                 'mean_savings': float(savings_arr.mean()),
                 'chosen_segment': chosen_segment.tolist(),
+                'hit_positions': hit_positions,
                 'snapshot': emperor.snapshot(),
             })
 

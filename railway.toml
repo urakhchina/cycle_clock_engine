@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python server.py"
+startCommand = "cd cycle_clock_v2 && PYTHONPATH=/app/CCT-StandardModel:$PYTHONPATH python server.py"
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
